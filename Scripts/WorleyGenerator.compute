@@ -1,0 +1,62 @@
+#pragma kernel GenerateWorley
+
+RWStructuredBuffer<float3> ShapeWorleyPointsA;
+RWTexture3D<float> ShapeRenderTexture;
+int CellSize;
+int CellsPerRow;
+
+static const int3 offsets2D[9] = {
+    int3(0, 0, 0),
+    int3(1, 0, 0),
+    int3(-1, 0, 0),
+    int3(0, 1, 0),
+    int3(1, 1, 0),
+    int3(-1, 1, 0),
+    int3(0, -1, 0),
+    int3(1, -1, 0),
+    int3(-1, -1, 0),
+};
+
+float GetDistanceBetween(int3 Pos, int PointIndex){
+    float3 Direction = ShapeWorleyPointsA[PointIndex]-Pos;
+    float sqrDstToNeighbour = dot(Direction,Direction);
+    float curDistance = sqrt(sqrDstToNeighbour);
+    return curDistance;
+}
+
+float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
+{
+    //we need values between 0 and 1 -> find max distance and scale by that
+    //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
+    float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
+    float distance = 999;
+    //Get Points from array based in Cell ID
+    for(int i = 0; i<9; i++){
+        int3 curCell = Cell+offsets2D[i];
+        //Ensure we dont check out of bounds
+        if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow ){
+            int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
+            distance = min(GetDistanceBetween(Pos, CurIndex),distance);
+        }
+    }
+    distance = distance/maxDistance;
+    return distance;
+}
+
+[numthreads(8,8,8)]
+void GenerateWorley(uint3 id : SV_DispatchThreadID) {
+    //For each pixel in my grid
+     for (int x = 0; x <  CellSize; x++)
+        {
+            for (int y = 0; y <  CellSize; y++)
+            {
+                for (int z = 0; z <  CellSize; z++)
+                {
+                    //Find distance to closest WorleyPoint
+                    int3 Pos  =  int3(x+id.x*CellSize,y+id.y*CellSize,z+id.z*CellSize);
+                    ShapeRenderTexture[Pos] = GetDistanceToClosestPoint(Pos, id);
+                }
+            }
+        }
+        
+}
