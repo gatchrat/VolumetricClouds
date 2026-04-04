@@ -15,6 +15,9 @@ public class CloudManager : MonoBehaviour
     public ComputeShader WorleyComputer;
     //Buffer
     private ComputeBuffer ShapeWorleyPointsA;
+    private ComputeBuffer ShapeWorleyPointsR;
+    private ComputeBuffer ShapeWorleyPointsG;
+    private ComputeBuffer ShapeWorleyPointsB;
 
     void Start()
     {
@@ -25,7 +28,7 @@ public class CloudManager : MonoBehaviour
             ShapeRenderTexture.Release(); //Falls per Editor erstellt
         }
 
-        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, RenderTextureFormat.RFloat)
+        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, RenderTextureFormat.ARGBFloat)
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
@@ -38,13 +41,29 @@ public class CloudManager : MonoBehaviour
 
         int CurrentKernel;
         int CellsPerRow = ShapeTextureSize / ShapeWosleyCellSize[0];
+
         ShapeWorleyPointsA = new ComputeBuffer((int)Math.Pow(CellsPerRow, 3), sizeof(float) * 3);
         Vector3[] WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellSize[0]);
         ShapeWorleyPointsA.SetData(WorleyPoints);
 
+        ShapeWorleyPointsR = new ComputeBuffer((int)Math.Pow(CellsPerRow, 3), sizeof(float) * 3);
+        WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellSize[0]);
+        ShapeWorleyPointsR.SetData(WorleyPoints);
+
+        ShapeWorleyPointsG = new ComputeBuffer((int)Math.Pow(CellsPerRow, 3), sizeof(float) * 3);
+        WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellSize[0]);
+        ShapeWorleyPointsG.SetData(WorleyPoints);
+
+        ShapeWorleyPointsB = new ComputeBuffer((int)Math.Pow(CellsPerRow, 3), sizeof(float) * 3);
+        WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellSize[0]);
+        ShapeWorleyPointsB.SetData(WorleyPoints);
+
         CurrentKernel = WorleyComputer.FindKernel("GenerateWorley");
         WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
         WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsA", ShapeWorleyPointsA);
+        WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsR", ShapeWorleyPointsR);
+        WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsG", ShapeWorleyPointsG);
+        WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsB", ShapeWorleyPointsB);
         WorleyComputer.SetInt("CellSize", ShapeWosleyCellSize[0]);
         WorleyComputer.SetInt("CellsPerRow", CellsPerRow);
 

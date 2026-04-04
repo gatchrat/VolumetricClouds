@@ -1,7 +1,10 @@
 #pragma kernel GenerateWorley
 
 RWStructuredBuffer<float3> ShapeWorleyPointsA;
-RWTexture3D<float> ShapeRenderTexture;
+RWStructuredBuffer<float3> ShapeWorleyPointsR;
+RWStructuredBuffer<float3> ShapeWorleyPointsG;
+RWStructuredBuffer<float3> ShapeWorleyPointsB;
+RWTexture3D<float4> ShapeRenderTexture;
 int CellSize;
 int CellsPerRow;
 
@@ -35,30 +38,33 @@ static const int3 offsets3D[27] = {
     int3(-1, -1, -1),
 };
 
-float GetDistanceBetween(int3 Pos, int PointIndex){
-    float3 Direction = ShapeWorleyPointsA[PointIndex]-Pos;
+float GetDistanceBetween(int3 Pos,int3 Pos2){
+    float3 Direction = Pos2-Pos;
     float sqrDstToNeighbour = dot(Direction,Direction);
     float curDistance = sqrt(sqrDstToNeighbour);
     return curDistance;
 }
 
-float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
+float4 GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
 {
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
     float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
-    float distance = 999;
+    float4 distance =  float4(maxDistance,maxDistance,maxDistance,maxDistance);
     //Closest Point is in either this or a neighbor cell
     for(int i = 0; i<27; i++){
         int3 curCell = Cell+offsets3D[i];
         //Ensure we dont check out of bounds
         if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow ){
             int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
-            distance = min(GetDistanceBetween(Pos, CurIndex),distance);
+            distance.x = min(GetDistanceBetween(Pos, ShapeWorleyPointsR[CurIndex]),distance.x);
+            distance.y = min(GetDistanceBetween(Pos, ShapeWorleyPointsG[CurIndex]),distance.y);
+            distance.z = min(GetDistanceBetween(Pos, ShapeWorleyPointsB[CurIndex]),distance.z);
+            distance.w = min(GetDistanceBetween(Pos, ShapeWorleyPointsA[CurIndex]),distance.w);
         }
     }
     distance = distance/maxDistance;
-    return distance;
+    return 1-distance; //Invert so point is white instead of black
 }
 
 [numthreads(8,8,8)]

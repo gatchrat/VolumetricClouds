@@ -273,7 +273,7 @@ MonoBehaviour:
   ShapeRenderTexture: {fileID: 0}
   DetailTextureSize: 32
   DetailRenderTexture: {fileID: 0}
-  ShapeWosleyCellSize: 20000000100000000800000004000000
+  ShapeWosleyCellSize: 10000000080000000400000002000000
   DetailWosleyCellSize: 100000000800000004000000
   WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
 --- !u!1 &410087039
