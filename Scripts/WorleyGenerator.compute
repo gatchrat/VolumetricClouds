@@ -5,7 +5,7 @@ RWTexture3D<float> ShapeRenderTexture;
 int CellSize;
 int CellsPerRow;
 
-static const int3 offsets2D[9] = {
+static const int3 offsets3D[27] = {
     int3(0, 0, 0),
     int3(1, 0, 0),
     int3(-1, 0, 0),
@@ -15,6 +15,24 @@ static const int3 offsets2D[9] = {
     int3(0, -1, 0),
     int3(1, -1, 0),
     int3(-1, -1, 0),
+    int3(0, 0, 1),
+    int3(1, 0, 1),
+    int3(-1, 0, 1),
+    int3(0, 1, 1),
+    int3(1, 1, 1),
+    int3(-1, 1, 1),
+    int3(0, -1, 1),
+    int3(1, -1, 1),
+    int3(-1, -1, 1),
+    int3(0, 0, -1),
+    int3(1, 0, -1),
+    int3(-1, 0, -1),
+    int3(0, 1, -1),
+    int3(1, 1, -1),
+    int3(-1, 1, -1),
+    int3(0, -1, -1),
+    int3(1, -1, -1),
+    int3(-1, -1, -1),
 };
 
 float GetDistanceBetween(int3 Pos, int PointIndex){
@@ -30,9 +48,9 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
     float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
     float distance = 999;
-    //Get Points from array based in Cell ID
-    for(int i = 0; i<9; i++){
-        int3 curCell = Cell+offsets2D[i];
+    //Closest Point is in either this or a neighbor cell
+    for(int i = 0; i<27; i++){
+        int3 curCell = Cell+offsets3D[i];
         //Ensure we dont check out of bounds
         if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow ){
             int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
@@ -45,6 +63,9 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
 
 [numthreads(8,8,8)]
 void GenerateWorley(uint3 id : SV_DispatchThreadID) {
+     if(any(id >= CellsPerRow)) {
+        return;
+    }
     //For each pixel in my grid
      for (int x = 0; x <  CellSize; x++)
         {

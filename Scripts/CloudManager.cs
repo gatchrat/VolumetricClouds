@@ -51,6 +51,7 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.Dispatch(CurrentKernel, CellsPerRow, CellsPerRow, CellsPerRow);
 
         ShapeWorleyPointsA.Dispose();
+
         Debug.Log(WorleyPoints[0]);
         Debug.Log(WorleyPoints[1]);
     }
