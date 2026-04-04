@@ -7,6 +7,7 @@ RWStructuredBuffer<float3> ShapeWorleyPointsB;
 RWTexture3D<float4> ShapeRenderTexture;
 int CellSize;
 int CellsPerRow;
+int CurLayer;
 
 static const int3 offsets3D[27] = {
     int3(0, 0, 0),
@@ -45,22 +46,34 @@ float GetDistanceBetween(int3 Pos,int3 Pos2){
     return curDistance;
 }
 
-float4 GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
+float3 GetCurPoint(int Index){
+    if(CurLayer == 0){
+        return ShapeWorleyPointsA[Index];
+    }
+    if(CurLayer == 1){
+        return ShapeWorleyPointsR[Index];
+    }
+    if(CurLayer == 2){
+        return ShapeWorleyPointsG[Index];
+    }
+    else{
+        return ShapeWorleyPointsB[Index];
+    }
+}
+
+float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
 {
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
     float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
-    float4 distance =  float4(maxDistance,maxDistance,maxDistance,maxDistance);
+    float distance =  maxDistance;
     //Closest Point is in either this or a neighbor cell
     for(int i = 0; i<27; i++){
         int3 curCell = Cell+offsets3D[i];
         //Ensure we dont check out of bounds
         if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow ){
             int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
-            distance.x = min(GetDistanceBetween(Pos, ShapeWorleyPointsR[CurIndex]),distance.x);
-            distance.y = min(GetDistanceBetween(Pos, ShapeWorleyPointsG[CurIndex]),distance.y);
-            distance.z = min(GetDistanceBetween(Pos, ShapeWorleyPointsB[CurIndex]),distance.z);
-            distance.w = min(GetDistanceBetween(Pos, ShapeWorleyPointsA[CurIndex]),distance.w);
+            distance.x = min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance.x);
         }
     }
     distance = distance/maxDistance;
@@ -81,7 +94,20 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID) {
                 {
                     //Find distance to closest WorleyPoint
                     int3 Pos  =  int3(x+id.x*CellSize,y+id.y*CellSize,z+id.z*CellSize);
-                    ShapeRenderTexture[Pos] = GetDistanceToClosestPoint(Pos, id);
+                    float4 NewValue = ShapeRenderTexture.Load(Pos);
+                    if(CurLayer == 0){
+                        NewValue.x = GetDistanceToClosestPoint(Pos, id);
+                    }
+                    if(CurLayer == 1){
+                         NewValue.y = GetDistanceToClosestPoint(Pos, id);
+                    }
+                    if(CurLayer == 2){
+                        NewValue.z = GetDistanceToClosestPoint(Pos, id);
+                    }
+                    if(CurLayer == 3){
+                         NewValue.w = GetDistanceToClosestPoint(Pos, id);
+                    }
+                    ShapeRenderTexture[Pos] = NewValue;
                 }
             }
         }
