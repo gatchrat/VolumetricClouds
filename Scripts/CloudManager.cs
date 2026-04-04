@@ -10,6 +10,7 @@ public class CloudManager : MonoBehaviour
     public int ShapeTextureSize = 128;
     public RenderTexture ShapeRenderTexture;
     public int[] ShapeWosleyCellCount = new int[] { 16, 24, 32, 48 };
+    public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f, 0.2f };
     public ComputeShader WorleyComputer;
     //Buffer
     private ComputeBuffer ShapeWorleyPointsA;
@@ -85,6 +86,14 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.SetInt("CurLayer", 3);
         WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
 
+        CurrentKernel = WorleyComputer.FindKernel("CombineWorley");
+        WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
+        CurCellsPerRow = ShapeWosleyCellCount[3];
+        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
+        WorleyComputer.SetInt("CurLayer", 3);
+        WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2], fBmWeights[3]);
+        WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
+
 
         ShapeWorleyPointsA.Dispose();
         ShapeWorleyPointsR.Dispose();
@@ -105,7 +114,7 @@ public class CloudManager : MonoBehaviour
             for (int y = 0; y < CellsPerRow; y++)
                 for (int z = 0; z < CellsPerRow; z++)
                 {
-                    float cellSize = (float)TextureSize / CellsPerRow; // fix: float division
+                    float cellSize = (float)TextureSize / CellsPerRow;
 
                     float lowerX = Mathf.Floor(x * cellSize);
                     float upperX = Mathf.Min(Mathf.Ceil((x + 1) * cellSize), TextureSize);
