@@ -9,8 +9,6 @@ public class CloudManager : MonoBehaviour
     public static int seed = 42;
     public int ShapeTextureSize = 128;
     public RenderTexture ShapeRenderTexture;
-    public int DetailTextureSize = 32;
-    public RenderTexture DetailRenderTexture;
     public int[] ShapeWosleyCellCount = new int[] { 16, 24, 32, 48 };
     public ComputeShader WorleyComputer;
     //Buffer
@@ -101,20 +99,32 @@ public class CloudManager : MonoBehaviour
     private Vector3[] CreateWorleyPoints(int TextureSize, int CellsPerRow)
     {
         int curIndex = 0;
-        int CellSize = TextureSize / CellsPerRow;
-        Debug.Log($"Generating Worley Points. {CellsPerRow} Cells Per Row. {TextureSize} TextureSize {CellSize} CelllSize");
         Vector3[] WorleyPoints = new Vector3[(int)Math.Pow(CellsPerRow, 3)];
+
         for (int x = 0; x < CellsPerRow; x++)
-        {
             for (int y = 0; y < CellsPerRow; y++)
-            {
                 for (int z = 0; z < CellsPerRow; z++)
                 {
-                    WorleyPoints[curIndex] = new Vector3(x * CellSize + UnityEngine.Random.Range(0, CellSize), y * CellSize + UnityEngine.Random.Range(0, CellSize), z * CellSize + UnityEngine.Random.Range(0, CellSize));
-                    curIndex++;
+                    float cellSize = (float)TextureSize / CellsPerRow; // fix: float division
+
+                    float lowerX = Mathf.Floor(x * cellSize);
+                    float upperX = Mathf.Min(Mathf.Ceil((x + 1) * cellSize), TextureSize);
+                    float sizeX = upperX - lowerX;
+
+                    float lowerY = Mathf.Floor(y * cellSize);
+                    float upperY = Mathf.Min(Mathf.Ceil((y + 1) * cellSize), TextureSize);
+                    float sizeY = upperY - lowerY;
+
+                    float lowerZ = Mathf.Floor(z * cellSize);
+                    float upperZ = Mathf.Min(Mathf.Ceil((z + 1) * cellSize), TextureSize);
+                    float sizeZ = upperZ - lowerZ;
+
+                    WorleyPoints[curIndex++] = new Vector3(
+                        lowerX + UnityEngine.Random.Range(0f, sizeX),
+                        lowerY + UnityEngine.Random.Range(0f, sizeY),
+                        lowerZ + UnityEngine.Random.Range(0f, sizeZ)
+                    );
                 }
-            }
-        }
         return WorleyPoints;
     }
 }

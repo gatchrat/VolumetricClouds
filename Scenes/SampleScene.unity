@@ -271,9 +271,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: '::'
   ShapeTextureSize: 128
   ShapeRenderTexture: {fileID: 0}
-  DetailTextureSize: 32
-  DetailRenderTexture: {fileID: 0}
-  ShapeWosleyCellCount: 0c0000000c0000000c00000008000000
+  ShapeWosleyCellCount: 080000000c0000001000000018000000
   WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
 --- !u!1 &410087039
 GameObject:

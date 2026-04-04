@@ -65,7 +65,7 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
 {
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
-    float CellSize = TextureSize/CellsPerRow; //Might be off by one pixel depending on the cell, should be fine
+    float CellSize = (float)TextureSize/CellsPerRow+2; //Might be off by one pixel depending on the cell, should be fine
     float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
     float distance =  maxDistance;
     //Closest Point is in either this or a neighbor cell
@@ -74,58 +74,46 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
         //Ensure we dont check out of bounds
         if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow ){
             int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
-            distance.x = min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance.x);
+            distance= min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance);
         }
     }
     distance = distance/maxDistance;
     return 1-distance; //Invert so point is white instead of black
 }
 
+
+void GetCellBounds(uint cellIndex, float cellSize, uint textureSize,
+                   out float lower, out float size)
+{
+    lower = floor(cellIndex * cellSize);
+    float upper = min(ceil((cellIndex + 1) * cellSize), textureSize); 
+    size  = upper - lower;
+}
 [numthreads(8,8,8)]
-void GenerateWorley(uint3 id : SV_DispatchThreadID) {
-     if(any(id >= CellsPerRow)) {
-        return;
+void GenerateWorley(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= CellsPerRow)) return;
+
+    float CellSize = (float)TextureSize / CellsPerRow;
+
+    float lowerX, sizeX, lowerY, sizeY, lowerZ, sizeZ;
+    GetCellBounds(id.x, CellSize, TextureSize, lowerX, sizeX);
+    GetCellBounds(id.y, CellSize, TextureSize, lowerY, sizeY);
+    GetCellBounds(id.z, CellSize, TextureSize, lowerZ, sizeZ);
+
+    for (int x = 0; x < (int)sizeX; x++)
+    for (int y = 0; y < (int)sizeY; y++)
+    for (int z = 0; z < (int)sizeZ; z++)
+    {
+        int3 Pos = int3(lowerX + x, lowerY + y, lowerZ + z);
+        float4 val = ShapeRenderTexture.Load(Pos);
+        float dist = GetDistanceToClosestPoint(Pos, id);
+
+        if      (CurLayer == 0) val.x = dist;
+        else if (CurLayer == 1) val.y = dist;
+        else if (CurLayer == 2) val.z = dist;
+        else if (CurLayer == 3) val.w = dist;
+
+        ShapeRenderTexture[Pos] = val;
     }
-    //Cellsize can be something weird like 4.8, but we need an integer 
-    float CellSize = TextureSize/CellsPerRow;
-    //Cellsize can vary a bit by Cell oof
-    //Calculate ideal cell borders and define bounds to be consistent
-    float LowerBorder = id.x*CellSize; //For example 4,8
-    float HigherBorder = min((id.x+1)*CellSize,TextureSize); //For example 9,6
-    //Lets just round down so [0,4]->[4,9] etc. for cell bounds -> Nope overlap -> Round up for lower bounds and down for higher bounds -> Dadurch haben wir auch keine Cell mit Size am ende, worst case immernoch 1 pixel
-    //-> [0,4]->[5,9]->[10,...
-    LowerBorder = floor(LowerBorder);
-    HigherBorder = ceil(HigherBorder);
-    float CellSizeX = HigherBorder - LowerBorder;
-    //Cell can be cut off at the border
-    HigherBorder = min(HigherBorder,TextureSize);
-    //For each pixel in my grid
-    float CellSizeY = ceil(min((id.y+1)*CellSize,TextureSize))-floor(id.y*CellSize);
-    float CellSizeZ = ceil(min((id.z+1)*CellSize,TextureSize))-floor(id.z*CellSize);
-     for (int x = 0; x <  CellSizeX; x++)
-        {
-            for (int y = 0; y <  CellSizeY; y++)
-            {
-                for (int z = 0; z <  CellSizeZ; z++)
-                {
-                    //Find distance to closest WorleyPoint
-                    int3 Pos  =  int3(x+LowerBorder,y+floor(id.y*TextureSize/CellsPerRow),z+floor(id.z*TextureSize/CellsPerRow)); 
-                    float4 NewValue = ShapeRenderTexture.Load(Pos);
-                    if(CurLayer == 0){
-                        NewValue.x = GetDistanceToClosestPoint(Pos, id);
-                    }
-                    if(CurLayer == 1){
-                         NewValue.y = GetDistanceToClosestPoint(Pos, id);
-                    }
-                    if(CurLayer == 2){
-                        NewValue.z = GetDistanceToClosestPoint(Pos, id);
-                    }
-                    if(CurLayer == 3){
-                         NewValue.w = GetDistanceToClosestPoint(Pos, id);
-                    }
-                    ShapeRenderTexture[Pos] = NewValue;
-                }
-            }
-        }
-        
 }
