@@ -10,6 +10,8 @@ public class CloudRenderPass : ScriptableRenderPass
     private int _kernel;
     private RTHandle ShapeHandle;
 
+    public float DensityThreshold;
+
     public void SetShapeTexture(RenderTexture Shape)
     {
         ShapeHandle?.Release();
@@ -29,6 +31,7 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         public ComputeShader shader;
         public int kernel;
+        public float DensityThreshold;
         public Bounds bounds;
         public Camera camera;
         public TextureHandle src;
@@ -55,6 +58,7 @@ public class CloudRenderPass : ScriptableRenderPass
             data.shader = _shader;
             data.kernel = _kernel;
             data.bounds = _bounds;
+            data.DensityThreshold = DensityThreshold;
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
@@ -76,6 +80,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeVectorParam(d.shader, "_Resolution", new Vector2(width, height));
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
+                cmd.SetComputeFloatParam(d.shader, "DensityThreshold", d.DensityThreshold);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "ShapeTexture", d.ShapeHandle);

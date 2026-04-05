@@ -10,7 +10,7 @@ float4x4 _CameraInverseProjection;
 float3   _BoundsMin;
 float3   _BoundsMax;
 float2   _Resolution;
-
+float DensityThreshold;
 
 struct Ray
 {
@@ -65,7 +65,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID)
         float3 uvw = (EntryPoint - _BoundsMin) / (_BoundsMax - _BoundsMin);
 
         float Density = ShapeTexture.SampleLevel(sampler_ShapeTexture, uvw, 0);
-        if(Density > 0.7){
+        if(Density >DensityThreshold){
             _OutputTex[id.xy] = float4(Density, Density, Density, 1);
         }
     }
