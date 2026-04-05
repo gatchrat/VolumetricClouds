@@ -13,6 +13,8 @@ public class CloudManager : MonoBehaviour
     public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f, 0.2f };
     public ComputeShader WorleyComputer;
     public float DensityThreshold = 0.7f; //Used in Renderpass
+    public int StepCount = 4;
+    public Transform CloudsBounds;
     //Buffer
     private ComputeBuffer ShapeWorleyPointsA;
     private ComputeBuffer ShapeWorleyPointsR;

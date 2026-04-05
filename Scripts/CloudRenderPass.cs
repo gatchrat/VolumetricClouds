@@ -6,11 +6,12 @@ using UnityEngine.Rendering.RenderGraphModule;
 public class CloudRenderPass : ScriptableRenderPass
 {
     private ComputeShader _shader;
-    private Bounds _bounds;
+    public Bounds Bounds;
     private int _kernel;
     private RTHandle ShapeHandle;
 
     public float DensityThreshold;
+    public int StepCount;
 
     public void SetShapeTexture(RenderTexture Shape)
     {
@@ -18,10 +19,9 @@ public class CloudRenderPass : ScriptableRenderPass
         ShapeHandle = RTHandles.Alloc(Shape);
     }
 
-    public CloudRenderPass(ComputeShader shader, Bounds bounds)
+    public CloudRenderPass(ComputeShader shader)
     {
         _shader = shader;
-        _bounds = bounds;
         _kernel = shader.FindKernel("CloudRaymarch");
         renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
     }
@@ -37,6 +37,7 @@ public class CloudRenderPass : ScriptableRenderPass
         public TextureHandle src;
         public TextureHandle dst;
         public TextureHandle ShapeHandle;
+        public int StepCount;
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -57,8 +58,9 @@ public class CloudRenderPass : ScriptableRenderPass
         {
             data.shader = _shader;
             data.kernel = _kernel;
-            data.bounds = _bounds;
+            data.bounds = Bounds;
             data.DensityThreshold = DensityThreshold;
+            data.StepCount = StepCount;
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
@@ -81,6 +83,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
                 cmd.SetComputeFloatParam(d.shader, "DensityThreshold", d.DensityThreshold);
+                cmd.SetComputeIntParam(d.shader, "StepCount", d.StepCount);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "ShapeTexture", d.ShapeHandle);

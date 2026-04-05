@@ -11,6 +11,7 @@ float3   _BoundsMin;
 float3   _BoundsMax;
 float2   _Resolution;
 float DensityThreshold;
+int StepCount;
 
 struct Ray
 {
@@ -59,13 +60,19 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID)
     {  
         float IntersectionSize = intersection.y-intersection.x;
         
-        //Replace by loop from entry point to exit over X steps
-        float3 EntryPoint = ray.origin+ray.direction*intersection.x;
-        // Remap world position to 0-1 within the bounds
-        float3 uvw = (EntryPoint - _BoundsMin) / (_BoundsMax - _BoundsMin);
+        float Density = 0;
+        for(int i = 0; i<StepCount; i++){
+            float3 EntryPoint = ray.origin+ray.direction*(intersection.x+(IntersectionSize*i/StepCount)); //Equal sized Steps through bounds
+            float3 uvw = (EntryPoint - _BoundsMin) / (_BoundsMax - _BoundsMin);
 
-        float Density = ShapeTexture.SampleLevel(sampler_ShapeTexture, uvw, 0);
+            Density += ShapeTexture.SampleLevel(sampler_ShapeTexture, uvw, 0);
+        }
+        Density = Density/StepCount;
+        // Remap world position to within the bounds
+       
         if(Density >DensityThreshold){
+            //Dense = Black
+            Density = 1-Density;
             _OutputTex[id.xy] = float4(Density, Density, Density, 1);
         }
     }

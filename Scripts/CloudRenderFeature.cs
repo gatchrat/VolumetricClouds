@@ -4,14 +4,13 @@ using UnityEngine.Rendering.Universal;
 public class CloudRendererFeature : ScriptableRendererFeature
 {
     public ComputeShader cloudShader;
-    public Bounds cloudVolumeBounds;
 
     private CloudRenderPass _pass;
 
     public override void Create()
     {
         if (cloudShader == null) return;
-        _pass = new CloudRenderPass(cloudShader, cloudVolumeBounds);
+        _pass = new CloudRenderPass(cloudShader);
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -22,6 +21,11 @@ public class CloudRendererFeature : ScriptableRendererFeature
 
         _pass.SetShapeTexture(Manager.ShapeRenderTexture);
         _pass.DensityThreshold = Manager.DensityThreshold;
+        _pass.StepCount = Manager.StepCount;
+        Bounds CloudBounds = new Bounds();
+        CloudBounds.size = Manager.CloudsBounds.localScale;
+        CloudBounds.center = Manager.CloudsBounds.localPosition;
+        _pass.Bounds = CloudBounds;
         renderer.EnqueuePass(_pass);
     }
 }
