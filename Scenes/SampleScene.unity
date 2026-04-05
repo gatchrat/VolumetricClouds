@@ -279,8 +279,8 @@ MonoBehaviour:
   - 0.125
   - 0.125
   WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
-  DensityThreshold: 0.7
-  StepCount: 4
+  DensityThreshold: 0.8
+  StepCount: 100
   CloudsBounds: {fileID: 764791172}
 --- !u!114 &330585549
 MonoBehaviour:
@@ -533,7 +533,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 100, z: 0}
-  m_LocalScale: {x: 300, y: 50, z: 300}
+  m_LocalScale: {x: 300, y: 300, z: 300}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}

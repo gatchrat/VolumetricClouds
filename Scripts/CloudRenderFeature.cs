@@ -19,7 +19,7 @@ public class CloudRendererFeature : ScriptableRendererFeature
         var Manager = Object.FindAnyObjectByType<CloudManager>();
         if (Manager == null || Manager.ShapeRenderTexture == null) return;
 
-        _pass.SetShapeTexture(Manager.ShapeRenderTexture);
+        _pass.ShapeRenderTexture = Manager.ShapeRenderTexture;
         _pass.DensityThreshold = Manager.DensityThreshold;
         _pass.StepCount = Manager.StepCount;
         Bounds CloudBounds = new Bounds();

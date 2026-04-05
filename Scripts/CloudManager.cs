@@ -36,7 +36,9 @@ public class CloudManager : MonoBehaviour
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
             volumeDepth = ShapeTextureSize,
             wrapMode = TextureWrapMode.Repeat,
-            filterMode = FilterMode.Bilinear
+            filterMode = FilterMode.Trilinear,
+            useMipMap = true,
+            autoGenerateMips = false
         };
 
         ShapeRenderTexture.Create();
@@ -90,11 +92,12 @@ public class CloudManager : MonoBehaviour
 
         CurrentKernel = WorleyComputer.FindKernel("CombineWorley");
         WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
-        CurCellsPerRow = ShapeWosleyCellCount[3];
-        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 3);
         WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2], fBmWeights[3]);
-        WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
+
+        int groups = Mathf.CeilToInt(ShapeTextureSize / 8f);
+        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
+
+        ShapeRenderTexture.GenerateMips();
 
 
         ShapeWorleyPointsA.Dispose();

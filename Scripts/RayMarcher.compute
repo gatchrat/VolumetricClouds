@@ -3,7 +3,7 @@
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _OutputTex;
 Texture3D<float4> ShapeTexture;
-SamplerState sampler_ShapeTexture;
+SamplerState linearClampSampler ;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
@@ -55,25 +55,38 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID)
 
     Ray ray = GenerateRay(id.xy);
     float2 intersection = RayBoxIntersect(_BoundsMin, _BoundsMax, ray.origin, ray.direction);
+    intersection.x = max(0,intersection.x);
 
-    if (intersection.x <= intersection.y)
-    {  
-        float IntersectionSize = intersection.y-intersection.x;
-        
-        float Density = 0;
-        for(int i = 0; i<StepCount; i++){
-            float3 EntryPoint = ray.origin+ray.direction*(intersection.x+(IntersectionSize*i/StepCount)); //Equal sized Steps through bounds
-            float3 uvw = (EntryPoint - _BoundsMin) / (_BoundsMax - _BoundsMin);
+   if (intersection.x <= intersection.y && intersection.y > 0) // only check exit is in front
+{  
+    float entryDist = max(0, intersection.x); // handles camera inside box
+    float exitDist = intersection.y;
+    float stepSize = (exitDist - entryDist) / StepCount;
 
-            Density += ShapeTexture.SampleLevel(sampler_ShapeTexture, uvw, 0);
+    float transmittance = 1.0;
+    float lightEnergy = 0.0;
+
+    for (int i = 0; i < StepCount; i++)
+    {
+        float3 pos = ray.origin + ray.direction * (entryDist + stepSize * i);
+        float3 uvw = (pos - _BoundsMin) / (_BoundsMax - _BoundsMin);
+
+        float density = ShapeTexture.SampleLevel(linearClampSampler, uvw, 0).x;
+
+        if (density > DensityThreshold)
+        {
+            float absorption = (density - DensityThreshold) * stepSize;
+            transmittance *= exp(-absorption * 10.0);
+            lightEnergy += transmittance * stepSize;
         }
-        Density = Density/StepCount;
-        // Remap world position to within the bounds
-       
-        if(Density >DensityThreshold){
-            //Dense = Black
-            Density = 1-Density;
-            _OutputTex[id.xy] = float4(Density, Density, Density, 1);
-        }
+
+        if (transmittance < 0.01) break;
     }
+
+    if (lightEnergy > 0)
+    {
+        float4 sceneColor = _SrcTex[id.xy];
+        _OutputTex[id.xy] = float4(lerp(float3(1,1,1), sceneColor.rgb, transmittance), 1.0);
+    }
+}
 }

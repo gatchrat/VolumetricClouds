@@ -9,15 +9,9 @@ public class CloudRenderPass : ScriptableRenderPass
     public Bounds Bounds;
     private int _kernel;
     private RTHandle ShapeHandle;
-
+    public RenderTexture ShapeRenderTexture;
     public float DensityThreshold;
     public int StepCount;
-
-    public void SetShapeTexture(RenderTexture Shape)
-    {
-        ShapeHandle?.Release();
-        ShapeHandle = RTHandles.Alloc(Shape);
-    }
 
     public CloudRenderPass(ComputeShader shader)
     {
@@ -42,6 +36,7 @@ public class CloudRenderPass : ScriptableRenderPass
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
+        _shader.SetTexture(_kernel, "ShapeTexture", ShapeRenderTexture);
         var resourceData = frameData.Get<UniversalResourceData>();
         var cameraData = frameData.Get<UniversalCameraData>();
         TextureHandle LocalShapeHandle = renderGraph.ImportTexture(ShapeHandle);
@@ -86,7 +81,6 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeIntParam(d.shader, "StepCount", d.StepCount);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
-                cmd.SetComputeTextureParam(d.shader, d.kernel, "ShapeTexture", d.ShapeHandle);
 
                 int groupsX = Mathf.CeilToInt(width / 8f);
                 int groupsY = Mathf.CeilToInt(height / 8f);
