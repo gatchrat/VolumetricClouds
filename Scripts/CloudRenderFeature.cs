@@ -17,6 +17,10 @@ public class CloudRendererFeature : ScriptableRendererFeature
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
     {
         if (_pass == null) return;
+        var generator = Object.FindAnyObjectByType<CloudManager>();
+        if (generator == null || generator.ShapeRenderTexture == null) return;
+
+        _pass.SetShapeTexture(generator.ShapeRenderTexture);
         renderer.EnqueuePass(_pass);
     }
 }

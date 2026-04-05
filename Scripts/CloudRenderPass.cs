@@ -8,6 +8,13 @@ public class CloudRenderPass : ScriptableRenderPass
     private ComputeShader _shader;
     private Bounds _bounds;
     private int _kernel;
+    private RTHandle ShapeHandle;
+
+    public void SetShapeTexture(RenderTexture Shape)
+    {
+        ShapeHandle?.Release();
+        ShapeHandle = RTHandles.Alloc(Shape);
+    }
 
     public CloudRenderPass(ComputeShader shader, Bounds bounds)
     {
@@ -26,12 +33,14 @@ public class CloudRenderPass : ScriptableRenderPass
         public Camera camera;
         public TextureHandle src;
         public TextureHandle dst;
+        public TextureHandle ShapeHandle;
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
         var resourceData = frameData.Get<UniversalResourceData>();
         var cameraData = frameData.Get<UniversalCameraData>();
+        TextureHandle LocalShapeHandle = renderGraph.ImportTexture(ShapeHandle);
 
         if (cameraData.camera.cameraType != CameraType.Game) return;
 
@@ -49,9 +58,11 @@ public class CloudRenderPass : ScriptableRenderPass
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
+            data.ShapeHandle = LocalShapeHandle;
 
             builder.UseTexture(data.src);
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
+            builder.UseTexture(data.ShapeHandle);
 
             builder.SetRenderFunc((PassData d, ComputeGraphContext ctx) =>
             {
@@ -67,6 +78,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
+                cmd.SetComputeTextureParam(d.shader, d.kernel, "ShapeTexture", d.ShapeHandle);
 
                 int groupsX = Mathf.CeilToInt(width / 8f);
                 int groupsY = Mathf.CeilToInt(height / 8f);
@@ -87,5 +99,10 @@ public class CloudRenderPass : ScriptableRenderPass
                 Blitter.BlitTexture(ctx.cmd, d.src, new Vector4(1, 1, 0, 0), 0, false);
             });
         }
+    }
+    public void Dispose()
+    {
+        ShapeHandle?.Release();
+        if (ShapeHandle != null) ShapeHandle.Release();
     }
 }
