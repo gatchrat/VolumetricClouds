@@ -1,0 +1,57 @@
+#pragma kernel CloudRaymarch
+
+Texture2D<float4>   _SrcTex;
+RWTexture2D<float4> _OutputTex;
+
+float4x4 _CameraToWorld;
+float4x4 _CameraInverseProjection;
+float3   _BoundsMin;
+float3   _BoundsMax;
+float2   _Resolution;
+
+struct Ray
+{
+    float3 origin;
+    float3 direction;
+};
+
+float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir)
+{
+    float3 t0 = (boundsMin - rayOrigin) / rayDir;
+    float3 t1 = (boundsMax - rayOrigin) / rayDir;
+    float3 tmin = min(t0, t1);
+    float3 tmax = max(t0, t1);
+    float dstA = max(max(tmin.x, tmin.y), tmin.z);
+    float dstB = min(tmax.x, min(tmax.y, tmax.z));
+    return float2(dstA, dstB);
+}
+
+Ray GenerateRay(uint2 pixelCoord)
+{
+    float2 uv = ((float2)pixelCoord / _Resolution) * 2.0 - 1.0;
+    float4 viewDir = mul(_CameraInverseProjection, float4(uv, 0.0, 1.0));
+    viewDir /= viewDir.w;
+    float3 worldDir = mul(_CameraToWorld, float4(viewDir.xyz, 0.0)).xyz;
+
+    Ray ray;
+    ray.origin    = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz;
+    ray.direction = normalize(worldDir);
+    return ray;
+}
+
+[numthreads(8, 8, 1)]
+void CloudRaymarch(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
+
+    // Default: pass scene through
+    _OutputTex[id.xy] = _SrcTex[id.xy];
+
+    Ray ray = GenerateRay(id.xy);
+    float2 intersection = RayBoxIntersect(_BoundsMin, _BoundsMax, ray.origin, ray.direction);
+
+    if (intersection.x <= intersection.y)
+    {
+        _OutputTex[id.xy] = float4(0, 0, 0, 1);
+    }
+}

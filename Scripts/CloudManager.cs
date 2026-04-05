@@ -18,6 +18,11 @@ public class CloudManager : MonoBehaviour
     private ComputeBuffer ShapeWorleyPointsG;
     private ComputeBuffer ShapeWorleyPointsB;
 
+    public ComputeShader RayMarcher;
+    public Bounds CloudContainer;
+    private RenderTexture CloudsRenderTexture;
+    public Camera MainCamera;
+
 
     void Start()
     {
@@ -135,5 +140,43 @@ public class CloudManager : MonoBehaviour
                     );
                 }
         return WorleyPoints;
+    }
+
+    void OnRenderImage(RenderTexture src, RenderTexture dest)
+    {
+        if (CloudsRenderTexture == null)
+        {
+            if (CloudsRenderTexture != null) CloudsRenderTexture.Release();
+            CloudsRenderTexture = new RenderTexture(src.width, src.height, 0, RenderTextureFormat.ARGBFloat);
+            CloudsRenderTexture.enableRandomWrite = true;
+            CloudsRenderTexture.Create();
+        }
+
+        // Copy current camera render into output as base
+        // Graphics.Blit(src, CloudsRenderTexture);
+
+        // Pass camera matrices
+        RayMarcher.SetMatrix("CameraToWorld", MainCamera.cameraToWorldMatrix);
+        RayMarcher.SetMatrix("CameraInverseProjection", MainCamera.projectionMatrix.inverse);
+        RayMarcher.SetVector("Resolution", new Vector2(src.width, src.height));
+
+        // Pass volume bounds
+        RayMarcher.SetVector("_BoundsMin", CloudContainer.min);
+        RayMarcher.SetVector("_BoundsMax", CloudContainer.max);
+        int CurrentKernel = RayMarcher.FindKernel("MarchRays");
+        // Bind output and dispatch
+        RayMarcher.SetTexture(CurrentKernel, "Output", CloudsRenderTexture);
+
+        int threadGroupsX = Mathf.CeilToInt(src.width / 8f);
+        int threadGroupsY = Mathf.CeilToInt(src.height / 8f);
+        RayMarcher.Dispatch(CurrentKernel, threadGroupsX, threadGroupsY, 1);
+
+        Graphics.Blit(CloudsRenderTexture, dest);
+        Debug.Log("test");
+    }
+
+    void OnDestroy()
+    {
+        if (CloudsRenderTexture != null) CloudsRenderTexture.Release();
     }
 }
