@@ -2,6 +2,8 @@
 
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _OutputTex;
+Texture3D<float4> ShapeTexture;
+SamplerState sampler_ShapeTexture;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
@@ -9,12 +11,14 @@ float3   _BoundsMin;
 float3   _BoundsMax;
 float2   _Resolution;
 
+
 struct Ray
 {
     float3 origin;
     float3 direction;
 };
 
+//Gets Distances for front and end of box -> Use to get points
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir)
 {
     float3 t0 = (boundsMin - rayOrigin) / rayDir;
@@ -26,6 +30,7 @@ float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, flo
     return float2(dstA, dstB);
 }
 
+//Cool Camera Math to find world pos and look direction of a pixel to generate a ray from it
 Ray GenerateRay(uint2 pixelCoord)
 {
     float2 uv = ((float2)pixelCoord / _Resolution) * 2.0 - 1.0;
@@ -51,7 +56,17 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID)
     float2 intersection = RayBoxIntersect(_BoundsMin, _BoundsMax, ray.origin, ray.direction);
 
     if (intersection.x <= intersection.y)
-    {
-        _OutputTex[id.xy] = float4(0, 0, 0, 1);
+    {  
+        float IntersectionSize = intersection.y-intersection.x;
+        
+        //Replace by loop from entry point to exit over X steps
+        float3 EntryPoint = ray.origin+ray.direction*intersection.x;
+        // Remap world position to 0-1 within the bounds
+        float3 uvw = (EntryPoint - _BoundsMin) / (_BoundsMax - _BoundsMin);
+
+        float Density = ShapeTexture.SampleLevel(sampler_ShapeTexture, uvw, 0);
+        if(Density > 0.7){
+            _OutputTex[id.xy] = float4(Density, Density, Density, 1);
+        }
     }
 }
