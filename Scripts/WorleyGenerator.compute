@@ -124,28 +124,11 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID)
 [numthreads(8,8,8)]
 void CombineWorley(uint3 id : SV_DispatchThreadID)
 {
-    if (any(id >= CellsPerRow)) return;
+    if (any(id >= (uint)TextureSize)) return;
 
-    float CellSize = (float)TextureSize / CellsPerRow;
-
-    float lowerX, sizeX, lowerY, sizeY, lowerZ, sizeZ;
-    GetCellBounds(id.x, CellSize, TextureSize, lowerX, sizeX);
-    GetCellBounds(id.y, CellSize, TextureSize, lowerY, sizeY);
-    GetCellBounds(id.z, CellSize, TextureSize, lowerZ, sizeZ);
-
-    for (int x = 0; x < (int)sizeX; x++)
-    for (int y = 0; y < (int)sizeY; y++)
-    for (int z = 0; z < (int)sizeZ; z++)
-    {
-        int3 Pos = int3(lowerX + x, lowerY + y, lowerZ + z);
-        float4 val = ShapeRenderTexture.Load(Pos);
-        val.y = val.x*fmbWeights.x+val.y*fmbWeights.y+val.z*fmbWeights.z+val.w*fmbWeights.w;
-        val.x = val.x*fmbWeights.x+val.y*fmbWeights.y+val.z*fmbWeights.z+val.w*fmbWeights.w;
-        val.z = val.x*fmbWeights.x+val.y*fmbWeights.y+val.z*fmbWeights.z+val.w*fmbWeights.w;
-        val.w = val.x*fmbWeights.x+val.y*fmbWeights.y+val.z*fmbWeights.z+val.w*fmbWeights.w;
-
-        ShapeRenderTexture[Pos] = val;
-    }
+    float4 val = ShapeRenderTexture.Load(int3(id));
+    float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.z*fmbWeights.z + val.w*fmbWeights.w;
+    ShapeRenderTexture[id] = float4(combined, combined, combined, combined);
 }
 
 
