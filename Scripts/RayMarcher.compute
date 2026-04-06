@@ -86,11 +86,11 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
                 float scattering = extinction;
 
                 float sunDensity = DensityTowardsSun(pos);
-                float sunTransmittance = exp(-sunDensity*0.1);
+                float sunTransmittance = exp(-sunDensity*0.05);
 
                 energy += scattering * stepSize * transmittance * sunTransmittance;
 
-                transmittance *= exp(-density * stepSize*5);
+                transmittance *= exp(-density * stepSize*0.01);
                 break;
                 if (transmittance < 0.01)
                 break;

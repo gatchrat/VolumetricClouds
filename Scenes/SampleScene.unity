@@ -281,7 +281,9 @@ MonoBehaviour:
   WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
   DensityThreshold: 0.8
   StepCount: 100
+  DensityMultiplier: 1.5
   CloudsBounds: {fileID: 764791172}
+  Sun: {fileID: 790451884}
 --- !u!114 &330585549
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -644,7 +646,7 @@ Transform:
   m_GameObject: {fileID: 790451880}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 250, z: 0}
+  m_LocalPosition: {x: 0, y: 300, z: 0}
   m_LocalScale: {x: 20, y: 20, z: 20}
   m_ConstrainProportionsScale: 0
   m_Children: []
