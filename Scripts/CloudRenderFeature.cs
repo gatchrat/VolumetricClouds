@@ -26,6 +26,8 @@ public class CloudRendererFeature : ScriptableRendererFeature
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;
         _pass.Bounds = CloudBounds;
+        _pass.SunPos = Manager.Sun.position;
+        _pass.DensityMultiplier = Manager.DensityMultiplier;
         renderer.EnqueuePass(_pass);
     }
 }

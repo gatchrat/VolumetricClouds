@@ -14,7 +14,9 @@ public class CloudManager : MonoBehaviour
     public ComputeShader WorleyComputer;
     public float DensityThreshold = 0.7f; //Used in Renderpass
     public int StepCount = 4;
+    public float DensityMultiplier = 1f;
     public Transform CloudsBounds;
+    public Transform Sun;
     //Buffer
     private ComputeBuffer ShapeWorleyPointsA;
     private ComputeBuffer ShapeWorleyPointsR;

@@ -12,6 +12,8 @@ public class CloudRenderPass : ScriptableRenderPass
     public RenderTexture ShapeRenderTexture;
     public float DensityThreshold;
     public int StepCount;
+    public Vector3 SunPos;
+    public float DensityMultiplier;
 
     public CloudRenderPass(ComputeShader shader)
     {
@@ -32,6 +34,8 @@ public class CloudRenderPass : ScriptableRenderPass
         public TextureHandle dst;
         public TextureHandle ShapeHandle;
         public int StepCount;
+        public Vector3 SunPos;
+        public float DensityMultiplier;
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -60,6 +64,8 @@ public class CloudRenderPass : ScriptableRenderPass
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
             data.ShapeHandle = LocalShapeHandle;
+            data.SunPos = SunPos;
+            data.DensityMultiplier = DensityMultiplier;
 
             builder.UseTexture(data.src);
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
@@ -77,8 +83,10 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeVectorParam(d.shader, "_Resolution", new Vector2(width, height));
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
+                cmd.SetComputeVectorParam(d.shader, "SunPostion", d.SunPos);
                 cmd.SetComputeFloatParam(d.shader, "DensityThreshold", d.DensityThreshold);
                 cmd.SetComputeIntParam(d.shader, "StepCount", d.StepCount);
+                cmd.SetComputeFloatParam(d.shader, "DensityMultiplier", d.DensityMultiplier);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
 
