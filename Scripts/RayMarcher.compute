@@ -3,7 +3,7 @@
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _OutputTex;
 Texture3D<float4> ShapeTexture;
-SamplerState linearClampSampler;
+SamplerState linearRepeatSampler;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
@@ -50,17 +50,17 @@ float GetDensityForWorldPos(float3 WorldPos) {
     float3 NoiseBoundsMin = _BoundsMin;
     float3 NoiseBoundsMax = _BoundsMin+ float3(600,600,600);
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
-    float Density = ShapeTexture.SampleLevel(linearClampSampler, uvw, 0).x;
-    /*if(Density > DensityThreshold) {
+    float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, 0).x;
+    if(Density > DensityThreshold) {
         //Add Detail
-        float3 detailSamplePos = uvw*2;
-        float4 detailNoise = ShapeTexture.SampleLevel(linearClampSampler, detailSamplePos, 0).x;
+        float3 detailSamplePos = uvw*20;
+        float4 detailNoise = ShapeTexture.SampleLevel(linearRepeatSampler, detailSamplePos, 0).x;
 
         // Subtract detail noise from base shape (weighted by inverse density so that edges get eroded more than centre)
         float oneMinusShape = 1 - Density;
         float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
-        Density = Density - (1-detailNoise) * detailErodeWeight * 1;
-    }*/
+        Density = Density - (1-detailNoise) * detailErodeWeight * 22;
+    }
     return Density;
 }
 
@@ -93,7 +93,7 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
     float CloudMultiplier = 0.1;
     if (intersection.x <= intersection.y) {
         //Distance to box beginning is closer than distance to hit at the other side -> we aiming into the box
-        float stepSize = 1;
+        float stepSize = 0.5;
         StepCount = floor((intersection.y - intersection.x) / stepSize);
 
         for (int i = 0; i < StepCount; i++) {
@@ -110,9 +110,9 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
 
                 float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
                 float sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
-                // sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
-                //energy += scattering  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2));
-                energy += scattering  * transmittance * sunTransmittance;
+                sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
+                energy += scattering  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2));
+                //energy += scattering  * transmittance * sunTransmittance;
                 transmittance *= exp(-density *CloudMultiplier); //The deeper into the cloud the less light escapes
                 if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
                 break;
