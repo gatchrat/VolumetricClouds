@@ -3,14 +3,14 @@
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _OutputTex;
 Texture3D<float4> ShapeTexture;
-SamplerState linearClampSampler ;
+SamplerState linearClampSampler;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
 float3 SunPostion;
-float3   _BoundsMin;
-float3   _BoundsMax;
-float2   _Resolution;
+float3 _BoundsMin;
+float3 _BoundsMax;
+float2 _Resolution;
 float DensityThreshold;
 float DensityMultiplier;
 int StepCount;
@@ -20,7 +20,6 @@ struct Ray {
     float3 direction;
 };
 
-//Gets Distances for front and end of box -> Use to get points
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
     float3 t0 = (boundsMin - rayOrigin) / rayDir;
     float3 t1 = (boundsMax - rayOrigin) / rayDir;
@@ -31,7 +30,6 @@ float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, flo
     return float2(dstA, dstB);
 }
 
-//Cool Camera Math to find world pos and look direction of a pixel to generate a ray from it
 Ray GenerateRay(uint2 pixelCoord) {
     float2 uv = ((float2)pixelCoord / _Resolution) * 2.0 - 1.0;
     float4 viewDir = mul(_CameraInverseProjection, float4(uv, 0.0, 1.0));
@@ -39,70 +37,88 @@ Ray GenerateRay(uint2 pixelCoord) {
     float3 worldDir = mul(_CameraToWorld, float4(viewDir.xyz, 0.0)).xyz;
 
     Ray ray;
-    ray.origin    = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz;
+    ray.origin = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz;
     ray.direction = normalize(worldDir);
     return ray;
+}
+
+float GetDensityForWorldPos(float3 WorldPos) {
+    float3 uvw = (WorldPos - _BoundsMin) / (_BoundsMax - _BoundsMin);
+    return ShapeTexture.SampleLevel(linearClampSampler, uvw, 0).x;
+}
+
+float DensityTowardsSun(float3 WorldPos) {
+    float3 dir = normalize(SunPostion - WorldPos);
+
+    float2 hit = RayBoxIntersect(_BoundsMin, _BoundsMax, WorldPos, dir);
+    float rayLength = max(0, hit.y);
+
+    int SunSteps = 6;
+    float stepSize = rayLength / SunSteps;
+
+    float density = 0;
+    float3 samplePos = WorldPos;
+
+    for (int j = 0; j < SunSteps; j++) {
+        samplePos += dir * stepSize;
+        density += GetDensityForWorldPos(samplePos) * stepSize;
+    }
+
+    return density;
+}
+
+float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
+    float energy = 0;
+    float transmittance = 1;
+
+    // FIXED: removed invalid condition
+    if (intersection.x <= intersection.y) {
+        float stepSize = (intersection.y - intersection.x) / StepCount;
+
+        for (int i = 0; i < StepCount; i++) {
+            float dist = intersection.x + stepSize * i;
+            float3 pos = ray.origin + ray.direction * dist;
+
+            float density = GetDensityForWorldPos(pos);
+
+            if (density > DensityThreshold) {
+                float extinction = density * DensityMultiplier;
+                float scattering = extinction;
+
+                float sunDensity = DensityTowardsSun(pos);
+                float sunTransmittance = exp(-sunDensity*0.1);
+
+                energy += scattering * stepSize * transmittance * sunTransmittance;
+
+                transmittance *= exp(-density * stepSize*5);
+                break;
+                if (transmittance < 0.01)
+                break;
+            }
+        }
+    }
+
+    return float2(energy, transmittance);
 }
 
 [numthreads(8, 8, 1)]
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
 
-    _OutputTex[id.xy] = _SrcTex[id.xy];
+    float4 sceneColor = _SrcTex[id.xy];
+    _OutputTex[id.xy] =_SrcTex[id.xy];
 
-    //Raymarch forwards from each pixel
     Ray ray = GenerateRay(id.xy);
     float2 intersection = RayBoxIntersect(_BoundsMin, _BoundsMax, ray.origin, ray.direction);
-    intersection.x = max(0,intersection.x);
+    intersection.x = max(0, intersection.x);
 
-    float transmittance = 1.0;//How much of the light is retained, lowers the deeper in a cloud you go
+    float2 result = CalculateEnergyAndTransmittance(ray, intersection);
 
-    //When the cloud space is hit
-    if (intersection.x <= intersection.y && intersection.y) {
-        // only check exit is in front
-        float entryDist = max(0, intersection.x); // handles camera inside box
-        float exitDist = intersection.y;
-        float stepSize = (exitDist - entryDist) / StepCount;
+    float energy = result.x;
+    float transmittance = result.y;
 
-        float overallLight = 0;
-        bool Cloud = false;
-
-        //March through the cloudspace in steps
-        for (int i = 0; i < StepCount; i++) {
-            float3 pos = ray.origin + ray.direction * (entryDist + stepSize * i);
-            float3 uvw = (pos - _BoundsMin) / (_BoundsMax - _BoundsMin);
-
-            float density = ShapeTexture.SampleLevel(linearClampSampler, uvw, 0).x;
-            //TODO use 2 cloud levels and Henderson optimisation from page 80+
-            //When inside a cloud
-            if (density > DensityThreshold) {
-                Cloud = true;
-                //Raymarch towards the sun and accumulate values 
-                Ray RayToSun;
-                RayToSun.origin = pos;
-                RayToSun.direction = normalize(SunPostion-pos);
-                float2 IntersectTowardsSun = RayBoxIntersect(_BoundsMin, _BoundsMax,pos,RayToSun.direction);
-                float DensityTowardsSun = 0;
-                float sunStepSize = IntersectTowardsSun.y / 6;
-
-                for (int j = 1; j < 6; j++) {
-                    float3 posTowardsSun = pos + RayToSun.direction * sunStepSize * j;
-                    float3 sunUVW = (posTowardsSun - _BoundsMin) / (_BoundsMax - _BoundsMin);
-                    DensityTowardsSun += ShapeTexture.SampleLevel(linearClampSampler, sunUVW, 0).x * sunStepSize;
-                }
-                //Use Beers Law on the sum
-                float absorption = (density - DensityThreshold) * stepSize * DensityMultiplier; // How much Light is absorbed based on current density
-                transmittance *= exp(-absorption); // Transmittance goes based on absorbtion
-                float LightAtThisPointInsideCloud = exp(-DensityTowardsSun*DensityMultiplier);
-                overallLight +=LightAtThisPointInsideCloud*transmittance;
-                if (transmittance < 0.01) break; // We are too deep in the cloud, no more light
-            }
-        }
-        overallLight /=StepCount;
-        if(Cloud) {
-            float4 sceneColor = _SrcTex[id.xy];
-            float3 cloudColor = float3(overallLight, overallLight, overallLight);
-            _OutputTex[id.xy] = float4(lerp(cloudColor, float3(1,1,1), transmittance), 1.0);
-        }
+    float4 cloudColor = float4(energy, energy, energy, 1);
+    if(transmittance < 1) {
+        _OutputTex[id.xy] = cloudColor;
     }
 }
