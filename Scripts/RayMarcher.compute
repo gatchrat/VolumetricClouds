@@ -70,7 +70,7 @@ float DensityTowardsSun(float3 WorldPos) {
     float rayLength = max(0, hit.y);
 
     float stepSize = 1;
-    int SunSteps = 40;
+    int SunSteps = 10;
 
     float density = 0;
     float3 samplePos = WorldPos;
@@ -89,7 +89,7 @@ float DensityTowardsSun(float3 WorldPos) {
 float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
     float energy = 0;
     float transmittance = 1;
-    float SunMultiplier = 0.5;
+    float SunMultiplier = 0.8;
     float CloudMultiplier = 0.3; //How fast transmittance falls off -> Big performance impact
 
     float SmallStepSize = 0.5;
@@ -116,8 +116,13 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
                     CurstepSize = SmallStepSize;
                 }else {
                     float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
-                    float sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
-                    sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
+                    float sunTransmittance = 1;
+                    if (sunDensity > 0) {
+                        //0 Density -> Full power, but powder deletes
+                        sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
+                        sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
+                    }
+
                     energy += density * DensityMultiplier  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2)); //TODO Henyey-Greenstein
                     transmittance *= exp(-density *CloudMultiplier); //The deeper into the cloud the less light escapes
                     if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
