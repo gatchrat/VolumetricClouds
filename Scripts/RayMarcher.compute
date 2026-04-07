@@ -42,7 +42,8 @@ Ray GenerateRay(uint2 pixelCoord) {
     return ray;
 }
 
-float GetDensityForWorldPos(float3 WorldPos, bool WithDetail) {
+float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
+    //Mipmap scaling from 0 -> 1 tripples fps nearly
     //TODO add to reduce banding
     //TODO scale sampling resolution from transmittance
     //Check if in bounds
@@ -52,10 +53,10 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail) {
     float3 NoiseBoundsMin = _BoundsMin;
     float3 NoiseBoundsMax = _BoundsMin+ float3(600,600,600);
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
-    float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, 0).x;
+    float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, Mipmap).x;
     if(Density > DensityThreshold && WithDetail) {
         float3 detailSamplePos = uvw*20; //Detail = Normal noise but scaled down by increasing pos scaling TODO Later bake into source tex
-        float4 detailNoise = ShapeTexture.SampleLevel(linearRepeatSampler, detailSamplePos, 0).x;
+        float4 detailNoise = ShapeTexture.SampleLevel(linearRepeatSampler, detailSamplePos, Mipmap).x;
         float oneMinusShape = 1 - Density;
         float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
         Density = Density - (1-detailNoise) * detailErodeWeight * 22;
@@ -77,7 +78,7 @@ float DensityTowardsSun(float3 WorldPos) {
 
     for (int j = 0; j < SunSteps; j++) {
         samplePos += dir *stepSize;
-        float CurDensity = GetDensityForWorldPos(samplePos,true);
+        float CurDensity = GetDensityForWorldPos(samplePos,true,1);
         if(CurDensity> DensityThreshold) {
             density += CurDensity * stepSize;
         }
@@ -104,7 +105,7 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
         float DistanceTraveled = 0; //Count distance traveled to not prevent calculating the distance each step
         while (DistanceTraveled <maxDist) {
             //Check for StepCount points the light values
-            float density = GetDensityForWorldPos(pos,CurstepSize == SmallStepSize);
+            float density = GetDensityForWorldPos(pos,CurstepSize == SmallStepSize,1-transmittance);
 
             if (density > DensityThreshold) {
                 //Density high enough -> We are in a cloud
