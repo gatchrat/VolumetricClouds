@@ -1,7 +1,7 @@
 #pragma kernel CloudRaymarch
 
 Texture2D<float4>   _SrcTex;
-RWTexture2D<float4> _OutputTex;
+RWTexture2D<float4> _CloudBuffer;
 Texture3D<float4> ShapeTexture;
 SamplerState linearRepeatSampler;
 
@@ -14,6 +14,7 @@ float2 _Resolution;
 float DensityThreshold;
 float DensityMultiplier;
 int StepCount;
+int _FrameIndex;
 
 struct Ray {
     float3 origin;
@@ -141,9 +142,10 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
 [numthreads(8, 8, 1)]
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
+    _CloudBuffer[id.xy] =float4(0,0,0,0);
+    if(_FrameIndex % 2 == (id.x+id.y) % 2) return; //Render each pixel every other frame
 
     float4 sceneColor = _SrcTex[id.xy];
-    _OutputTex[id.xy] =_SrcTex[id.xy];
 
     Ray ray = GenerateRay(id.xy);
     float2 intersection = RayBoxIntersect(_BoundsMin, _BoundsMax, ray.origin, ray.direction);
@@ -158,6 +160,6 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     //Without energy check get black border around cloud, NOT caused by sampling rough and then detail. Maybe caused by Powder for sun when density to cloud is 0? 
     if(transmittance < 1 && energy > 0) {
         //1 -> we didnt hit nuffin
-        _OutputTex[id.xy] = cloudColor;
+        _CloudBuffer[id.xy] = cloudColor;
     }
 }

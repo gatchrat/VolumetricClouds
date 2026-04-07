@@ -4,13 +4,15 @@ using UnityEngine.Rendering.Universal;
 public class CloudRendererFeature : ScriptableRendererFeature
 {
     public ComputeShader cloudShader;
+    public ComputeShader InterpolateShader;
+    public ComputeShader MergeShader;
 
     private CloudRenderPass _pass;
 
     public override void Create()
     {
         if (cloudShader == null) return;
-        _pass = new CloudRenderPass(cloudShader);
+        _pass = new CloudRenderPass(cloudShader, InterpolateShader, MergeShader);
     }
 
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)

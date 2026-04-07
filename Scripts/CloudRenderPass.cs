@@ -6,6 +6,8 @@ using UnityEngine.Rendering.RenderGraphModule;
 public class CloudRenderPass : ScriptableRenderPass
 {
     private ComputeShader _shader;
+    private ComputeShader InterpolateShader;
+    private ComputeShader MergeShader;
     public Bounds Bounds;
     private int _kernel;
     private RTHandle ShapeHandle;
@@ -14,10 +16,30 @@ public class CloudRenderPass : ScriptableRenderPass
     public int StepCount;
     public Vector3 SunPos;
     public float DensityMultiplier;
+    private RenderTexture _cloudBuffer;
 
-    public CloudRenderPass(ComputeShader shader)
+    private RTHandle _cloudHandle; // persistent field
+
+    private void EnsureCloudBuffer(int width, int height)
+    {
+        if (_cloudBuffer != null && _cloudBuffer.width == width && _cloudBuffer.height == height)
+            return;
+
+        if (_cloudBuffer != null) _cloudBuffer.Release();
+        _cloudHandle?.Release();
+
+        _cloudBuffer = new RenderTexture(width, height, 0, RenderTextureFormat.ARGBFloat);
+        _cloudBuffer.enableRandomWrite = true;
+        _cloudBuffer.Create();
+
+        _cloudHandle = RTHandles.Alloc(_cloudBuffer);
+    }
+
+    public CloudRenderPass(ComputeShader shader, ComputeShader InterShader, ComputeShader MShader)
     {
         _shader = shader;
+        InterpolateShader = InterShader;
+        MergeShader = MShader;
         _kernel = shader.FindKernel("CloudRaymarch");
         renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
     }
@@ -26,12 +48,15 @@ public class CloudRenderPass : ScriptableRenderPass
     private class PassData
     {
         public ComputeShader shader;
+        public ComputeShader InterpolateShader;
+        public ComputeShader MergeShader;
         public int kernel;
         public float DensityThreshold;
         public Bounds bounds;
         public Camera camera;
         public TextureHandle src;
         public TextureHandle dst;
+        public TextureHandle cloudBuffer;
         public TextureHandle ShapeHandle;
         public int StepCount;
         public Vector3 SunPos;
@@ -56,6 +81,8 @@ public class CloudRenderPass : ScriptableRenderPass
         using (var builder = renderGraph.AddComputePass<PassData>("Cloud Raymarch", out var data))
         {
             data.shader = _shader;
+            data.InterpolateShader = InterpolateShader;
+            data.MergeShader = MergeShader;
             data.kernel = _kernel;
             data.bounds = Bounds;
             data.DensityThreshold = DensityThreshold;
@@ -71,6 +98,13 @@ public class CloudRenderPass : ScriptableRenderPass
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
             builder.UseTexture(data.ShapeHandle);
 
+            EnsureCloudBuffer(cameraData.camera.pixelWidth, cameraData.camera.pixelHeight);
+            TextureHandle cloudTexture = renderGraph.ImportTexture(_cloudHandle);
+
+            data.cloudBuffer = cloudTexture;
+
+            builder.UseTexture(data.cloudBuffer, AccessFlags.ReadWrite);
+
             builder.SetRenderFunc((PassData d, ComputeGraphContext ctx) =>
             {
                 var cmd = ctx.cmd;
@@ -79,6 +113,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 int height = camera.pixelHeight;
 
                 cmd.SetComputeMatrixParam(d.shader, "_CameraToWorld", camera.cameraToWorldMatrix);
+                cmd.SetComputeIntParam(d.shader, "_FrameIndex", Time.frameCount);
                 cmd.SetComputeMatrixParam(d.shader, "_CameraInverseProjection", camera.projectionMatrix.inverse);
                 cmd.SetComputeVectorParam(d.shader, "_Resolution", new Vector2(width, height));
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
@@ -89,10 +124,28 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeFloatParam(d.shader, "DensityMultiplier", d.DensityMultiplier);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
+                cmd.SetComputeTextureParam(d.shader, d.kernel, "_CloudBuffer", d.cloudBuffer);
 
                 int groupsX = Mathf.CeilToInt(width / 8f);
                 int groupsY = Mathf.CeilToInt(height / 8f);
                 cmd.DispatchCompute(d.shader, d.kernel, groupsX, groupsY, 1);
+                ///////////////////////////////////////////
+
+                cmd.SetComputeTextureParam(d.InterpolateShader, d.kernel, "_CloudBuffer", d.cloudBuffer);
+                cmd.SetComputeIntParam(d.InterpolateShader, "_FrameIndex", Time.frameCount);
+                cmd.SetComputeVectorParam(d.InterpolateShader, "_Resolution", new Vector2(width, height));
+
+                cmd.DispatchCompute(d.InterpolateShader, d.kernel, groupsX, groupsY, 1);
+                ///////////////////////////////////////////
+
+                cmd.SetComputeTextureParam(d.MergeShader, d.kernel, "_CloudBuffer", d.cloudBuffer);
+                cmd.SetComputeTextureParam(d.MergeShader, d.kernel, "_SrcTex", d.src);
+                cmd.SetComputeTextureParam(d.MergeShader, d.kernel, "_OutputTex", d.dst);
+                cmd.SetComputeVectorParam(d.MergeShader, "_Resolution", new Vector2(width, height));
+
+                cmd.DispatchCompute(d.MergeShader, d.kernel, groupsX, groupsY, 1);
+
+
             });
         }
 
@@ -112,7 +165,8 @@ public class CloudRenderPass : ScriptableRenderPass
     }
     public void Dispose()
     {
+        _cloudHandle?.Release();
+        _cloudBuffer?.Release();
         ShapeHandle?.Release();
-        if (ShapeHandle != null) ShapeHandle.Release();
     }
 }

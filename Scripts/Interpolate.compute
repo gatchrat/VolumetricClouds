@@ -1,0 +1,23 @@
+#pragma kernel Interpolate
+
+RWTexture2D<float4> _CloudBuffer;
+float2 _Resolution;
+int _FrameIndex;
+
+static const int2 offsetsInterpolation[4] = {
+    int2(0, 1),
+    int2(0, -1),
+    int2(-1, 0),
+    int2(1, 0),
+};
+
+[numthreads(8, 8, 1)]
+void Interpolate(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
+    if(_FrameIndex % 2 != (id.x+id.y) % 2) return; //Render each pixel every other frame
+    if(id.x>0&& id.x < _Resolution.x-1) {
+        _CloudBuffer[id.xy] = (_CloudBuffer[int2(id.x-1,id.y)]+_CloudBuffer[int2(id.x+1,id.y)])/2;
+    }else {
+        _CloudBuffer[id.xy] = _CloudBuffer[id.xy];
+    }
+}
