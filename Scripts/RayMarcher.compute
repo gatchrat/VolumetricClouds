@@ -42,7 +42,9 @@ Ray GenerateRay(uint2 pixelCoord) {
     return ray;
 }
 
-float GetDensityForWorldPos(float3 WorldPos) {
+float GetDensityForWorldPos(float3 WorldPos, bool WithDetail) {
+    //TODO add to reduce banding
+    //TODO scale sampling resolution from transmittance
     //Check if in bounds
     if (any(WorldPos > _BoundsMax) || any(WorldPos < _BoundsMin)) {
         return 0;
@@ -51,7 +53,7 @@ float GetDensityForWorldPos(float3 WorldPos) {
     float3 NoiseBoundsMax = _BoundsMin+ float3(600,600,600);
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
     float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, 0).x;
-    if(Density > DensityThreshold) {
+    if(Density > DensityThreshold && WithDetail) {
         float3 detailSamplePos = uvw*20; //Detail = Normal noise but scaled down by increasing pos scaling TODO Later bake into source tex
         float4 detailNoise = ShapeTexture.SampleLevel(linearRepeatSampler, detailSamplePos, 0).x;
         float oneMinusShape = 1 - Density;
@@ -75,8 +77,9 @@ float DensityTowardsSun(float3 WorldPos) {
 
     for (int j = 0; j < SunSteps; j++) {
         samplePos += dir *stepSize;
-        if(GetDensityForWorldPos(samplePos) > DensityThreshold) {
-            density += GetDensityForWorldPos(samplePos) * stepSize;
+        float CurDensity = GetDensityForWorldPos(samplePos,true);
+        if(CurDensity> DensityThreshold) {
+            density += CurDensity * stepSize;
         }
     }
 
@@ -87,31 +90,42 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
     float energy = 0;
     float transmittance = 1;
     float SunMultiplier = 0.5;
-    float CloudMultiplier = 0.1;
+    float CloudMultiplier = 0.3; //How fast transmittance falls off -> Big performance impact
+
+    float SmallStepSize = 0.5;
+    float BigStepSize = 2;
+    float CurstepSize = BigStepSize;  //Start with big steps
+
     if (intersection.x <= intersection.y) {
         //Distance to box beginning is closer than distance to hit at the other side -> we aiming into the box
-        float stepSize = 0.5;
-        StepCount = floor((intersection.y - intersection.x) / stepSize);
 
-        for (int i = 0; i < StepCount; i++) {
+        float3 pos = ray.origin+ ray.direction*intersection.x;
+        float maxDist = intersection.y - intersection.x; //Area we want to march
+        float DistanceTraveled = 0; //Count distance traveled to not prevent calculating the distance each step
+        while (DistanceTraveled <maxDist) {
             //Check for StepCount points the light values
-            float dist = intersection.x + stepSize * i;
-            float3 pos = ray.origin + ray.direction * dist;
-
-            float density = GetDensityForWorldPos(pos);
+            float density = GetDensityForWorldPos(pos,CurstepSize == SmallStepSize);
 
             if (density > DensityThreshold) {
                 //Density high enough -> We are in a cloud
-
-                float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
-                float sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
-                // sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
-                energy += density * DensityMultiplier  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2));
-                //energy += scattering  * transmittance * sunTransmittance;
-                transmittance *= exp(-density *CloudMultiplier); //The deeper into the cloud the less light escapes
-                if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
-                break;
+                if(CurstepSize == BigStepSize) {
+                    //When big stepping into a cloud, step back and start small stepping -> Never miss clouds unless thinner than bigstepsize
+                    //How to know if exiting a cloud?
+                    DistanceTraveled -= CurstepSize; //TODO dont step back when at og postion
+                    pos -=  ray.direction * CurstepSize;
+                    CurstepSize = SmallStepSize;
+                }else {
+                    float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
+                    float sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
+                    sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
+                    energy += density * DensityMultiplier  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2)); //TODO Henyey-Greenstein
+                    transmittance *= exp(-density *CloudMultiplier); //The deeper into the cloud the less light escapes
+                    if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
+                    break;
+                }
             }
+            pos +=  ray.direction * CurstepSize;
+            DistanceTraveled += CurstepSize;
         }
     }
 
