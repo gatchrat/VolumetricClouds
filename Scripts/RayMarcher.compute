@@ -52,11 +52,8 @@ float GetDensityForWorldPos(float3 WorldPos) {
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
     float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, 0).x;
     if(Density > DensityThreshold) {
-        //Add Detail
-        float3 detailSamplePos = uvw*20;
+        float3 detailSamplePos = uvw*20; //Detail = Normal noise but scaled down by increasing pos scaling TODO Later bake into source tex
         float4 detailNoise = ShapeTexture.SampleLevel(linearRepeatSampler, detailSamplePos, 0).x;
-
-        // Subtract detail noise from base shape (weighted by inverse density so that edges get eroded more than centre)
         float oneMinusShape = 1 - Density;
         float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
         Density = Density - (1-detailNoise) * detailErodeWeight * 22;
@@ -105,13 +102,11 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
 
             if (density > DensityThreshold) {
                 //Density high enough -> We are in a cloud
-                float extinction = density * DensityMultiplier;
-                float scattering = extinction;
 
                 float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
                 float sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
-                sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
-                energy += scattering  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2));
+                // sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
+                energy += density * DensityMultiplier  * transmittance * sunTransmittance*(1-exp(-density *CloudMultiplier*2));
                 //energy += scattering  * transmittance * sunTransmittance;
                 transmittance *= exp(-density *CloudMultiplier); //The deeper into the cloud the less light escapes
                 if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
@@ -140,7 +135,8 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float transmittance = result.y;
 
     float4 cloudColor = float4(energy, energy, energy, 1);
-    if(transmittance < 1) {
+    //Without energy check get black border around cloud, NOT caused by sampling rough and then detail. Maybe caused by Powder for sun when density to cloud is 0? 
+    if(transmittance < 1 && energy > 0) {
         //1 -> we didnt hit nuffin
         _OutputTex[id.xy] = cloudColor;
     }
