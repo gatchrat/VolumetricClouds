@@ -22,6 +22,7 @@ public class CloudRendererFeature : ScriptableRendererFeature
         if (Manager == null || Manager.ShapeRenderTexture == null) return;
 
         _pass.ShapeRenderTexture = Manager.ShapeRenderTexture;
+        _pass.BlueNoiseTexture = Manager.BlueNoise;
         _pass.DetailRenderTexture = Manager.DetailRenderTexture;
         _pass.DensityThreshold = Manager.DensityThreshold;
         _pass.StepCount = Manager.StepCount;

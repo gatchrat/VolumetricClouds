@@ -4,8 +4,10 @@ Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _CloudBuffer;
 Texture3D<float4> ShapeTexture;
 Texture3D<float4> DetailTexture;
+Texture2D<float4> BlueNoise;
 SamplerState linearRepeatSampler;
 SamplerState linearRepeatSampler_2;
+SamplerState linearRepeatSampler_3;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
@@ -47,7 +49,6 @@ Ray GenerateRay(uint2 pixelCoord) {
 
 float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
     //Mipmap scaling from 0 -> 1 tripples fps nearly
-    //TODO add to reduce banding
     //TODO scale sampling resolution from transmittance
     //Check if in bounds
     if (any(WorldPos > _BoundsMax) || any(WorldPos < _BoundsMin)) {
@@ -61,7 +62,7 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
         float4 detailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2, uvw*15, 0).x;
         float oneMinusShape = 1 - Density;
         float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
-        Density = Density - (1-detailNoise) * detailErodeWeight *2;
+        Density = Density - (1-detailNoise) * detailErodeWeight *8;
     }
     return Density;
 }
@@ -89,7 +90,7 @@ float DensityTowardsSun(float3 WorldPos) {
     return density;
 }
 
-float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
+float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNoise) {
     float energy = 0;
     float transmittance = 1;
     float SunMultiplier = 0.8;
@@ -101,10 +102,11 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection) {
 
     if (intersection.x <= intersection.y) {
         //Distance to box beginning is closer than distance to hit at the other side -> we aiming into the box
-
-        float3 pos = ray.origin+ ray.direction*intersection.x;
+        float rayOffset = (blueNoise - 0.5) * 4 * CurstepSize;     //Add some noise to the position to reduce banding
+        rayOffset = 0;//Disable for now, only introduces noise but doesnt really reduce banding :(
+        float3 pos = ray.origin+ ray.direction*intersection.x+ray.direction*rayOffset ;
         float maxDist = intersection.y - intersection.x; //Area we want to march
-        float DistanceTraveled = 0; //Count distance traveled to not prevent calculating the distance each step
+        float DistanceTraveled = ray.direction*rayOffset; //Count distance traveled to not prevent calculating the distance each step
         while (DistanceTraveled <maxDist) {
             //Check for StepCount points the light values
             float density = GetDensityForWorldPos(pos,CurstepSize == SmallStepSize,1-transmittance);
@@ -151,8 +153,8 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     Ray ray = GenerateRay(id.xy);
     float2 intersection = RayBoxIntersect(_BoundsMin, _BoundsMax, ray.origin, ray.direction);
     intersection.x = max(0, intersection.x); //0 = We are inside
-
-    float2 result = CalculateEnergyAndTransmittance(ray, intersection);
+    float blueNoise = BlueNoise.SampleLevel(linearRepeatSampler_3, id.xy/_Resolution, 0).x;
+    float2 result = CalculateEnergyAndTransmittance(ray, intersection,blueNoise);
 
     float energy = result.x;
     float transmittance = result.y;

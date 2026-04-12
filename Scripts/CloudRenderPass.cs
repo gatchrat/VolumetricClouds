@@ -12,6 +12,7 @@ public class CloudRenderPass : ScriptableRenderPass
     private int _kernel;
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
+    public Texture2D BlueNoiseTexture;
     public float DensityThreshold;
     public int StepCount;
     public Vector3 SunPos;
@@ -60,12 +61,14 @@ public class CloudRenderPass : ScriptableRenderPass
         public int StepCount;
         public Vector3 SunPos;
         public float DensityMultiplier;
+        public TextureHandle blueNoiseHandle;
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
         _shader.SetTexture(_kernel, "ShapeTexture", ShapeRenderTexture);
         _shader.SetTexture(_kernel, "DetailTexture", DetailRenderTexture);
+        //   _shader.SetTexture(_kernel, "BlueNoise", BlueNoiseTexture);
         var resourceData = frameData.Get<UniversalResourceData>();
         var cameraData = frameData.Get<UniversalCameraData>();
 
@@ -91,6 +94,10 @@ public class CloudRenderPass : ScriptableRenderPass
             data.dst = dst;
             data.SunPos = SunPos;
             data.DensityMultiplier = DensityMultiplier;
+
+            TextureHandle blueNoiseHandle = renderGraph.ImportTexture(RTHandles.Alloc(BlueNoiseTexture));
+            data.blueNoiseHandle = blueNoiseHandle;
+            builder.UseTexture(data.blueNoiseHandle);
 
             builder.UseTexture(data.src);
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
@@ -122,6 +129,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_CloudBuffer", d.cloudBuffer);
+                cmd.SetComputeTextureParam(d.shader, d.kernel, "BlueNoise", d.blueNoiseHandle);
 
                 int groupsX = Mathf.CeilToInt(width / 8f);
                 int groupsY = Mathf.CeilToInt(height / 8f);
