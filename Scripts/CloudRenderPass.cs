@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering.RenderGraphModule;
+using Unity.ProjectAuditor.Editor.Core;
 
 public class CloudRenderPass : ScriptableRenderPass
 {
@@ -13,10 +14,7 @@ public class CloudRenderPass : ScriptableRenderPass
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
     public Texture2D BlueNoiseTexture;
-    public float DensityThreshold;
-    public int StepCount;
     public Vector3 SunPos;
-    public float DensityMultiplier;
     private RenderTexture _cloudBuffer;
 
     private RTHandle _cloudHandle; // persistent field
@@ -35,6 +33,15 @@ public class CloudRenderPass : ScriptableRenderPass
 
         _cloudHandle = RTHandles.Alloc(_cloudBuffer);
     }
+    private ComputeBuffer _settingsBuffer;
+
+    public void UpdateSettings(CloudSettings settings)
+    {
+        if (_settingsBuffer == null)
+            _settingsBuffer = new ComputeBuffer(1, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
+
+        _settingsBuffer.SetData(new CloudSettings[] { settings });
+    }
 
     public CloudRenderPass(ComputeShader shader, ComputeShader InterShader, ComputeShader MShader)
     {
@@ -52,16 +59,14 @@ public class CloudRenderPass : ScriptableRenderPass
         public ComputeShader InterpolateShader;
         public ComputeShader MergeShader;
         public int kernel;
-        public float DensityThreshold;
         public Bounds bounds;
         public Camera camera;
         public TextureHandle src;
         public TextureHandle dst;
         public TextureHandle cloudBuffer;
-        public int StepCount;
         public Vector3 SunPos;
-        public float DensityMultiplier;
         public TextureHandle blueNoiseHandle;
+        public ComputeBuffer settingsBuffer;
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -87,13 +92,11 @@ public class CloudRenderPass : ScriptableRenderPass
             data.MergeShader = MergeShader;
             data.kernel = _kernel;
             data.bounds = Bounds;
-            data.DensityThreshold = DensityThreshold;
-            data.StepCount = StepCount;
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
             data.SunPos = SunPos;
-            data.DensityMultiplier = DensityMultiplier;
+            data.settingsBuffer = _settingsBuffer;
 
             TextureHandle blueNoiseHandle = renderGraph.ImportTexture(RTHandles.Alloc(BlueNoiseTexture));
             data.blueNoiseHandle = blueNoiseHandle;
@@ -123,13 +126,11 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
                 cmd.SetComputeVectorParam(d.shader, "SunPostion", d.SunPos);
-                cmd.SetComputeFloatParam(d.shader, "DensityThreshold", d.DensityThreshold);
-                cmd.SetComputeIntParam(d.shader, "StepCount", d.StepCount);
-                cmd.SetComputeFloatParam(d.shader, "DensityMultiplier", d.DensityMultiplier);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_OutputTex", d.dst);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "_CloudBuffer", d.cloudBuffer);
                 cmd.SetComputeTextureParam(d.shader, d.kernel, "BlueNoise", d.blueNoiseHandle);
+                cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings", d.settingsBuffer, 0, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
 
                 int groupsX = Mathf.CeilToInt(width / 8f);
                 int groupsY = Mathf.CeilToInt(height / 8f);
@@ -172,5 +173,6 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         _cloudHandle?.Release();
         _cloudBuffer?.Release();
+        _settingsBuffer?.Release();
     }
 }

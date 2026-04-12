@@ -22,16 +22,14 @@ public class CloudRendererFeature : ScriptableRendererFeature
         if (Manager == null || Manager.ShapeRenderTexture == null) return;
 
         _pass.ShapeRenderTexture = Manager.ShapeRenderTexture;
+        _pass.UpdateSettings(Manager.cloudSettings);
         _pass.BlueNoiseTexture = Manager.BlueNoise;
         _pass.DetailRenderTexture = Manager.DetailRenderTexture;
-        _pass.DensityThreshold = Manager.DensityThreshold;
-        _pass.StepCount = Manager.StepCount;
         Bounds CloudBounds = new Bounds();
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;
         _pass.Bounds = CloudBounds;
         _pass.SunPos = Manager.Sun.position;
-        _pass.DensityMultiplier = Manager.DensityMultiplier;
         renderer.EnqueuePass(_pass);
     }
 }

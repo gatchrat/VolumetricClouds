@@ -2,6 +2,19 @@ using UnityEngine;
 using System;
 using UnityEditor;
 using Unity.VisualScripting;
+using UnityEngine.UIElements;
+
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct CloudSettings
+{
+    public Vector3 Offset;
+    public float Scale;
+    public float DensityThreshold;
+    public float DensityMultiplier;
+    public int StepCount;
+    // Pad to 16-byte alignment if needed
+    public float _pad0;
+}
 
 public class CloudManager : MonoBehaviour
 {
@@ -16,8 +29,12 @@ public class CloudManager : MonoBehaviour
     public float DensityThreshold = 0.7f; //Used in Renderpass
     public int StepCount = 4;
     public float DensityMultiplier = 1f;
+    public float Scale = 1f;
+    public Vector3 Offset;
     public Transform CloudsBounds;
     public Transform Sun;
+
+    public CloudSettings cloudSettings;
     //Buffer
     private ComputeBuffer PerlinNoiseBuffer;
     private ComputeBuffer ShapeWorleyPointsA;
@@ -25,6 +42,15 @@ public class CloudManager : MonoBehaviour
     private ComputeBuffer ShapeWorleyPointsG;
     private ComputeBuffer ShapeWorleyPointsB;
     private ComputeBuffer DetailWorleyPoints;
+
+    void Update()
+    {
+        cloudSettings.DensityMultiplier = DensityMultiplier;
+        cloudSettings.StepCount = StepCount;
+        cloudSettings.Scale = Scale;
+        cloudSettings.DensityThreshold = DensityThreshold;
+        cloudSettings.Offset = Offset;
+    }
 
     void Start()
     {

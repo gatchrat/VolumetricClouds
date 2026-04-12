@@ -15,10 +15,16 @@ float3 SunPostion;
 float3 _BoundsMin;
 float3 _BoundsMax;
 float2 _Resolution;
-float DensityThreshold;
-float DensityMultiplier;
-int StepCount;
 int _FrameIndex;
+
+cbuffer _CloudSettings {
+    float3 Offset;
+    float Scale;
+    float DensityThreshold;
+    float DensityMultiplier;
+    int StepCount;
+    float _pad0;
+};
 
 struct Ray {
     float3 origin;
@@ -56,7 +62,10 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
     }
     float3 NoiseBoundsMin = _BoundsMin;
     float3 NoiseBoundsMax = _BoundsMin+ float3(600,600,600);
+    WorldPos += Offset;
+    WorldPos *= Scale;
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
+
     float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, Mipmap).x;
     if(Density > DensityThreshold && WithDetail) {
         float4 detailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2, uvw*15, 0).x;
