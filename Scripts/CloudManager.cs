@@ -3,6 +3,7 @@ using System;
 using UnityEditor;
 using Unity.VisualScripting;
 using UnityEngine.UIElements;
+using UnityEngine.Experimental.Rendering;
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct CloudSettings
@@ -23,7 +24,8 @@ public class CloudManager : MonoBehaviour
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
     public Texture2D BlueNoise;
-    public int[] ShapeWosleyCellCount = new int[] { 16, 24, 32, 48 };
+    public int[] ShapeWosleyCellCount = new int[] { 4, 6, 8, 12 };
+    public int[] DetailWosleyCellCount = new int[] { 16, 24, 32 };
     public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f, 0.2f };
     public ComputeShader WorleyComputer;
     public float DensityThreshold = 0.7f; //Used in Renderpass
@@ -66,7 +68,7 @@ public class CloudManager : MonoBehaviour
             DetailRenderTexture.Release();
         }
 
-        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, RenderTextureFormat.ARGBFloat)
+        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, GraphicsFormat.R32G32B32A32_SFloat)
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
@@ -78,7 +80,7 @@ public class CloudManager : MonoBehaviour
         };
         ShapeRenderTexture.Create();
 
-        DetailRenderTexture = new RenderTexture(32, 32, 0, RenderTextureFormat.ARGBFloat)
+        DetailRenderTexture = new RenderTexture(32, 32, 0, GraphicsFormat.R32G32B32A32_SFloat)
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
@@ -153,14 +155,14 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
 
         /////////////////////////////DETAIL///////////////////////////////////////////////
-        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[0] + 2, 3), sizeof(float) * 3);
-        WorleyPoints = CreateWorleyPoints(32, ShapeWosleyCellCount[0]);
+        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(DetailWosleyCellCount[0] + 2, 3), sizeof(float) * 3);
+        WorleyPoints = CreateWorleyPoints(32, DetailWosleyCellCount[0]);
         DetailWorleyPoints.SetData(WorleyPoints);
 
         CurrentKernel = WorleyComputer.FindKernel("GenerateWorleyDetail");
 
         WorleyComputer.SetBuffer(CurrentKernel, "DetailWorleyPoints", DetailWorleyPoints);
-        CurCellsPerRow = ShapeWosleyCellCount[0];
+        CurCellsPerRow = DetailWosleyCellCount[0];
         WorleyComputer.SetInt("TextureSize", 32);
         WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
         WorleyComputer.SetInt("CurLayer", 0);
@@ -169,23 +171,23 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
 
         DetailWorleyPoints.Dispose();
-        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[1] + 2, 3), sizeof(float) * 3);
-        WorleyPoints = CreateWorleyPoints(32, ShapeWosleyCellCount[1]);
+        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(DetailWosleyCellCount[1] + 2, 3), sizeof(float) * 3);
+        WorleyPoints = CreateWorleyPoints(32, DetailWosleyCellCount[1]);
         DetailWorleyPoints.SetData(WorleyPoints);
         WorleyComputer.SetBuffer(CurrentKernel, "DetailWorleyPoints", DetailWorleyPoints);
 
-        CurCellsPerRow = ShapeWosleyCellCount[1];
+        CurCellsPerRow = DetailWosleyCellCount[1];
         WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
         WorleyComputer.SetInt("CurLayer", 1);
         WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
 
         DetailWorleyPoints.Dispose();
-        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[2] + 2, 3), sizeof(float) * 3);
-        WorleyPoints = CreateWorleyPoints(32, ShapeWosleyCellCount[2]);
+        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(DetailWosleyCellCount[2] + 2, 3), sizeof(float) * 3);
+        WorleyPoints = CreateWorleyPoints(32, DetailWosleyCellCount[2]);
         DetailWorleyPoints.SetData(WorleyPoints);
         WorleyComputer.SetBuffer(CurrentKernel, "DetailWorleyPoints", DetailWorleyPoints);
 
-        CurCellsPerRow = ShapeWosleyCellCount[2];
+        CurCellsPerRow = DetailWosleyCellCount[2];
         WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
         WorleyComputer.SetInt("CurLayer", 2);
         WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);

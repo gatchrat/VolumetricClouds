@@ -47,7 +47,7 @@ static const int3 offsets3D[27] = {
     int3(-1, -1, -1),
 };
 
-float GetDistanceBetween(int3 Pos,int3 Pos2) {
+float GetDistanceBetween(float3 Pos,float3 Pos2) {
     float3 Direction = Pos2-Pos;
     float sqrDstToNeighbour = dot(Direction,Direction);
     float curDistance = sqrt(sqrDstToNeighbour);
@@ -69,7 +69,7 @@ float3 GetCurPoint(int Index) {
     }
 }
 
-float GetDistanceToClosestPoint(int3 Pos, uint3 Cell) {
+float GetDistanceToClosestPoint(float3 Pos, uint3 Cell) {
     Cell += uint3(1,1,1);//One Layer of cells is outside, so we need to move one in
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
@@ -87,7 +87,7 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell) {
     return 1-distance; //Invert so point is white instead of black
 }
 
-float GetDistanceToClosestPointDetail(int3 Pos, uint3 Cell) {
+float GetDistanceToClosestPointDetail(float3 Pos, uint3 Cell) {
      Cell += uint3(1,1,1);//One Layer of cells is outside, so we need to move one in
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
@@ -126,9 +126,9 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID) {
     for (int x = 0; x < (int)sizeX; x++)
     for (int y = 0; y < (int)sizeY; y++)
     for (int z = 0; z < (int)sizeZ; z++) {
-        int3 Pos = int3(lowerX + x, lowerY + y, lowerZ + z);
+        float3 Pos = float3(lowerX + x, lowerY + y, lowerZ + z);
         float4 val;
-            val =  ShapeRenderTexture.Load(Pos);
+            val =  ShapeRenderTexture.Load(int3(Pos));
 
         float dist = GetDistanceToClosestPoint(Pos, id);
 
@@ -155,8 +155,8 @@ void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
     for (int x = 0; x < (int)sizeX; x++)
     for (int y = 0; y < (int)sizeY; y++)
     for (int z = 0; z < (int)sizeZ; z++) {
-        int3 Pos = int3(lowerX + x, lowerY + y, lowerZ + z);
-        float4 val = DetailRenderTexture.Load(Pos);
+        float3 Pos = float3(lowerX + x, lowerY + y, lowerZ + z);
+        float4 val = DetailRenderTexture.Load(int3(Pos));
 
         float dist = GetDistanceToClosestPointDetail(Pos, id);
 
@@ -171,16 +171,19 @@ void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
 [numthreads(8,8,8)]
 void CombineWorley(uint3 id : SV_DispatchThreadID) {
     if (any(id >= (uint)TextureSize)) return;
-    float4 val = ShapeRenderTexture.Load(int3(id));
+    float4 val = ShapeRenderTexture.Load(id);
     float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.z*fmbWeights.z + val.w*fmbWeights.w;
+    float weightSum =fmbWeights.x + fmbWeights.y + fmbWeights.z + fmbWeights.w;
+    combined /= weightSum;
     ShapeRenderTexture[id] = float4(combined, combined, combined, combined);
 }
 
 [numthreads(8,8,8)]
 void CombineWorleyDetail(uint3 id : SV_DispatchThreadID) {
     if (any(id >= (uint)TextureSize)) return;
-    float4 val = DetailRenderTexture.Load(int3(id));
+    float4 val = DetailRenderTexture.Load(id);
     float combined = val.x*0.5 + val.y*0.3 + val.z*0.2 ;
+    
     DetailRenderTexture[id] = float4(combined, combined, combined, 1);
 }
 
