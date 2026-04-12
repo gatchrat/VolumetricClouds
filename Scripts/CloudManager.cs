@@ -8,12 +8,12 @@ using UnityEngine.UIElements;
 public struct CloudSettings
 {
     public Vector3 Offset;
-    public float Scale;
+    public float _pad0;
+    public Vector3 Scale;
+    public float _pad1;
     public float DensityThreshold;
     public float DensityMultiplier;
     public int StepCount;
-    // Pad to 16-byte alignment if needed
-    public float _pad0;
 }
 
 public class CloudManager : MonoBehaviour
@@ -29,7 +29,7 @@ public class CloudManager : MonoBehaviour
     public float DensityThreshold = 0.7f; //Used in Renderpass
     public int StepCount = 4;
     public float DensityMultiplier = 1f;
-    public float Scale = 1f;
+    public Vector3 Scale = new Vector3(1, 1, 1);
     public Vector3 Offset;
     public Transform CloudsBounds;
     public Transform Sun;
@@ -213,11 +213,15 @@ public class CloudManager : MonoBehaviour
     {
         int curIndex = 0;
         float[] PerlinValues = new float[ShapeTextureSize * ShapeTextureSize * ShapeTextureSize];
+        FastNoiseLite noise = new FastNoiseLite();
+        float noiseScale = 10f;
+        noise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+
         for (int x = 0; x < ShapeTextureSize; x++)
             for (int y = 0; y < ShapeTextureSize; y++)
                 for (int z = 0; z < ShapeTextureSize; z++)
                 {
-                    PerlinValues[curIndex++] = (Perlin.Noise(x / (float)ShapeTextureSize, y / (float)ShapeTextureSize, z / (float)ShapeTextureSize) + 1) / 2; //Function is -1 till +1 we want 0 to 1      
+                    PerlinValues[curIndex++] = (noise.GetNoise(x * noiseScale, y * noiseScale, z * noiseScale) + 1) / 2; //Function is -1 till +1 we want 0 to 1      
                     if (PerlinValues[curIndex - 1] > 1 || PerlinValues[curIndex - 1] <= 0)
                     {
                         Debug.Log(PerlinValues[curIndex - 1]);

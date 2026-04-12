@@ -208,7 +208,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0.28338584, y: 0.36369744, z: 0.11720498, w: -0.8795906}
-  m_LocalPosition: {x: 254.28569, y: -116.359604, z: -242.91461}
+  m_LocalPosition: {x: 254.32, y: -116.359604, z: -242.91461}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -270,7 +270,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cfc2546a0001f6409122248f791820c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
-  seed: 3
+  seed: 22
   ShapeTextureSize: 128
   ShapeRenderTexture: {fileID: 0}
   DetailRenderTexture: {fileID: 0}
@@ -285,7 +285,7 @@ MonoBehaviour:
   DensityThreshold: 0.7
   StepCount: 100
   DensityMultiplier: 1.5
-  Scale: 1
+  Scale: {x: 1, y: 1, z: 1}
   Offset: {x: 0, y: 0, z: 0}
   CloudsBounds: {fileID: 764791172}
   Sun: {fileID: 790451884}
@@ -540,7 +540,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 100, z: 0}
-  m_LocalScale: {x: 1000, y: 100, z: 1000}
+  m_LocalScale: {x: 1000, y: 1000, z: 1000}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
