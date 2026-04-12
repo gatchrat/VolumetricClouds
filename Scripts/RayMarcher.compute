@@ -61,11 +61,12 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
         return 0;
     }
     float3 NoiseBoundsMin = _BoundsMin;
+    //float3 NoiseBoundsMax = _BoundsMax*Scale;
     float3 NoiseBoundsMax = _BoundsMin+ float3(600,600,600);
     WorldPos += Offset;
     WorldPos *= Scale;
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
-
+    uvw += Offset;
     float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, Mipmap).x;
     if(Density > DensityThreshold && WithDetail) {
         float4 detailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2, uvw*15, 0).x;

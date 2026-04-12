@@ -70,6 +70,7 @@ float3 GetCurPoint(int Index) {
 }
 
 float GetDistanceToClosestPoint(int3 Pos, uint3 Cell) {
+    Cell += uint3(1,1,1);//One Layer of cells is outside, so we need to move one in
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
     float CellSize = (float)TextureSize/CellsPerRow+2; //Might be off by one pixel depending on the cell, should be fine
@@ -79,16 +80,15 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell) {
     for(int i = 0; i<27; i++) {
         int3 curCell = Cell+offsets3D[i];
         //Ensure we dont check out of bounds
-        if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow) {
-            int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
+            int CurIndex = curCell.z + (CellsPerRow+2)*curCell.y+(CellsPerRow+2)*(CellsPerRow+2)*curCell.x;
             distance= min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance);
-        }
     }
     distance = distance/maxDistance;
     return 1-distance; //Invert so point is white instead of black
 }
 
 float GetDistanceToClosestPointDetail(int3 Pos, uint3 Cell) {
+     Cell += uint3(1,1,1);//One Layer of cells is outside, so we need to move one in
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
     float CellSize = (float)TextureSize/CellsPerRow+2; //Might be off by one pixel depending on the cell, should be fine
@@ -98,10 +98,8 @@ float GetDistanceToClosestPointDetail(int3 Pos, uint3 Cell) {
     for(int i = 0; i<27; i++) {
         int3 curCell = Cell+offsets3D[i];
         //Ensure we dont check out of bounds
-        if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow) {
-            int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
+            int CurIndex = curCell.z + (CellsPerRow+2)*curCell.y+(CellsPerRow+2)*(CellsPerRow+2)*curCell.x;
             distance= min(GetDistanceBetween(Pos, DetailWorleyPoints[CurIndex]),distance);
-        }
     }
     distance = distance/maxDistance;
     return 1-distance; //Invert so point is white instead of black

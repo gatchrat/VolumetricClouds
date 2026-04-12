@@ -270,6 +270,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cfc2546a0001f6409122248f791820c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: '::'
+  seed: 3
   ShapeTextureSize: 128
   ShapeRenderTexture: {fileID: 0}
   DetailRenderTexture: {fileID: 0}

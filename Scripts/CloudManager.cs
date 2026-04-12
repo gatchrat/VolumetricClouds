@@ -18,7 +18,7 @@ public struct CloudSettings
 
 public class CloudManager : MonoBehaviour
 {
-    public static int seed = 42;
+    public int seed = 42;
     public int ShapeTextureSize = 128;
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
@@ -97,19 +97,19 @@ public class CloudManager : MonoBehaviour
         float[] PerlinNoise = CreatePerlinNoise(ShapeRenderTexture);
         PerlinNoiseBuffer.SetData(PerlinNoise);
 
-        ShapeWorleyPointsA = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[0], 3), sizeof(float) * 3);
+        ShapeWorleyPointsA = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[0] + 2, 3), sizeof(float) * 3);
         Vector3[] WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellCount[0]);
         ShapeWorleyPointsA.SetData(WorleyPoints);
 
-        ShapeWorleyPointsR = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[1], 3), sizeof(float) * 3);
+        ShapeWorleyPointsR = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[1] + 2, 3), sizeof(float) * 3);
         WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellCount[1]);
         ShapeWorleyPointsR.SetData(WorleyPoints);
 
-        ShapeWorleyPointsG = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[2], 3), sizeof(float) * 3);
+        ShapeWorleyPointsG = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[2] + 2, 3), sizeof(float) * 3);
         WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellCount[2]);
         ShapeWorleyPointsG.SetData(WorleyPoints);
 
-        ShapeWorleyPointsB = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[3], 3), sizeof(float) * 3);
+        ShapeWorleyPointsB = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[3] + 2, 3), sizeof(float) * 3);
         WorleyPoints = CreateWorleyPoints(ShapeTextureSize, ShapeWosleyCellCount[3]);
         ShapeWorleyPointsB.SetData(WorleyPoints);
 
@@ -153,7 +153,7 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
 
         /////////////////////////////DETAIL///////////////////////////////////////////////
-        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[0], 3), sizeof(float) * 3);
+        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[0] + 2, 3), sizeof(float) * 3);
         WorleyPoints = CreateWorleyPoints(32, ShapeWosleyCellCount[0]);
         DetailWorleyPoints.SetData(WorleyPoints);
 
@@ -169,7 +169,7 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
 
         DetailWorleyPoints.Dispose();
-        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[1], 3), sizeof(float) * 3);
+        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[1] + 2, 3), sizeof(float) * 3);
         WorleyPoints = CreateWorleyPoints(32, ShapeWosleyCellCount[1]);
         DetailWorleyPoints.SetData(WorleyPoints);
         WorleyComputer.SetBuffer(CurrentKernel, "DetailWorleyPoints", DetailWorleyPoints);
@@ -180,7 +180,7 @@ public class CloudManager : MonoBehaviour
         WorleyComputer.Dispatch(CurrentKernel, CurCellsPerRow, CurCellsPerRow, CurCellsPerRow);
 
         DetailWorleyPoints.Dispose();
-        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[2], 3), sizeof(float) * 3);
+        DetailWorleyPoints = new ComputeBuffer((int)Math.Pow(ShapeWosleyCellCount[2] + 2, 3), sizeof(float) * 3);
         WorleyPoints = CreateWorleyPoints(32, ShapeWosleyCellCount[2]);
         DetailWorleyPoints.SetData(WorleyPoints);
         WorleyComputer.SetBuffer(CurrentKernel, "DetailWorleyPoints", DetailWorleyPoints);
@@ -230,13 +230,14 @@ public class CloudManager : MonoBehaviour
     private Vector3[] CreateWorleyPoints(int TextureSize, int CellsPerRow)
     {
         int curIndex = 0;
-        Vector3[] WorleyPoints = new Vector3[(int)Math.Pow(CellsPerRow, 3)];
+        Vector3[] WorleyPoints = new Vector3[(int)Math.Pow(CellsPerRow + 2, 3)];
+        float cellSize = (float)TextureSize / CellsPerRow;
 
-        for (int x = 0; x < CellsPerRow; x++)
-            for (int y = 0; y < CellsPerRow; y++)
-                for (int z = 0; z < CellsPerRow; z++)
+        for (int x = -1; x < CellsPerRow + 1; x++)
+            for (int y = -1; y < CellsPerRow + 1; y++)
+                for (int z = -1; z < CellsPerRow + 1; z++)
                 {
-                    float cellSize = (float)TextureSize / CellsPerRow;
+
 
                     float lowerX = Mathf.Floor(x * cellSize);
                     float upperX = Mathf.Min(Mathf.Ceil((x + 1) * cellSize), TextureSize);
