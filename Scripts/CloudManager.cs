@@ -261,6 +261,34 @@ public class CloudManager : MonoBehaviour
                         lowerZ + UnityEngine.Random.Range(0f, sizeZ)
                     );
                 }
+        // Helper to convert (x,y,z) in [-1, CellsPerRow] to flat index
+        int ToIndex(int x, int y, int z) =>
+            (x + 1) * (CellsPerRow + 2) * (CellsPerRow + 2) +
+            (y + 1) * (CellsPerRow + 2) +
+            (z + 1);
+
+        // Second pass: override border cells with wrapped core points + tile offset
+        for (int x = -1; x < CellsPerRow + 1; x++)
+            for (int y = -1; y < CellsPerRow + 1; y++)
+                for (int z = -1; z < CellsPerRow + 1; z++)
+                {
+                    bool isBorder = x == -1 || x == CellsPerRow ||
+                                    y == -1 || y == CellsPerRow ||
+                                    z == -1 || z == CellsPerRow;
+                    if (!isBorder) continue;
+
+                    int cx = ((x % CellsPerRow) + CellsPerRow) % CellsPerRow;
+                    int cy = ((y % CellsPerRow) + CellsPerRow) % CellsPerRow;
+                    int cz = ((z % CellsPerRow) + CellsPerRow) % CellsPerRow;
+
+                    Vector3 core = WorleyPoints[ToIndex(cx, cy, cz)];
+
+                    float offsetX = (x < 0 ? -1 : x >= CellsPerRow ? 1 : 0) * TextureSize;
+                    float offsetY = (y < 0 ? -1 : y >= CellsPerRow ? 1 : 0) * TextureSize;
+                    float offsetZ = (z < 0 ? -1 : z >= CellsPerRow ? 1 : 0) * TextureSize;
+
+                    WorleyPoints[ToIndex(x, y, z)] = core + new Vector3(offsetX, offsetY, offsetZ);
+                }
         return WorleyPoints;
     }
 }
