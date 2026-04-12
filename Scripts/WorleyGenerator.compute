@@ -5,10 +5,15 @@ RWStructuredBuffer<float3> ShapeWorleyPointsA;
 RWStructuredBuffer<float3> ShapeWorleyPointsR;
 RWStructuredBuffer<float3> ShapeWorleyPointsG;
 RWStructuredBuffer<float3> ShapeWorleyPointsB;
+RWStructuredBuffer<float3> DetailWorleyPointsR;
+RWStructuredBuffer<float3> DetailWorleyPointsG;
+RWStructuredBuffer<float> PerlinNoise;
 RWTexture3D<float4> ShapeRenderTexture;
+RWTexture3D<float4> DetailRenderTexture;
 int TextureSize;
 int CellsPerRow;
 int CurLayer;
+int Mode;
 float4 fmbWeights;
 
 static const int3 offsets3D[27] = {
@@ -41,40 +46,51 @@ static const int3 offsets3D[27] = {
     int3(-1, -1, -1),
 };
 
-float GetDistanceBetween(int3 Pos,int3 Pos2){
+float GetDistanceBetween(int3 Pos,int3 Pos2) {
     float3 Direction = Pos2-Pos;
     float sqrDstToNeighbour = dot(Direction,Direction);
     float curDistance = sqrt(sqrDstToNeighbour);
     return curDistance;
 }
 
-float3 GetCurPoint(int Index){
-    if(CurLayer == 0){
-        return ShapeWorleyPointsA[Index];
+float3 GetCurPoint(int Index) {
+    if(CurLayer == 0) {
+        if(Mode == 0) {
+            return ShapeWorleyPointsA[Index];
+        }else {
+            return DetailWorleyPointsR[Index];
+        }
     }
-    if(CurLayer == 1){
-        return ShapeWorleyPointsR[Index];
+    if(CurLayer == 1) {
+        if(Mode == 0) {
+            return ShapeWorleyPointsR[Index];
+        }else {
+            return DetailWorleyPointsG[Index];
+        }
     }
-    if(CurLayer == 2){
-        return ShapeWorleyPointsG[Index];
+    if(CurLayer == 2) {
+        if(Mode == 0) {
+            return ShapeWorleyPointsG[Index];
+        }else {
+            return DetailWorleyPointsG[Index];
+        }
     }
-    else{
+    else {
         return ShapeWorleyPointsB[Index];
     }
 }
 
-float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
-{
+float GetDistanceToClosestPoint(int3 Pos, uint3 Cell) {
     //we need values between 0 and 1 -> find max distance and scale by that
     //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
     float CellSize = (float)TextureSize/CellsPerRow+2; //Might be off by one pixel depending on the cell, should be fine
     float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
     float distance =  maxDistance;
     //Closest Point is in either this or a neighbor cell
-    for(int i = 0; i<27; i++){
+    for(int i = 0; i<27; i++) {
         int3 curCell = Cell+offsets3D[i];
         //Ensure we dont check out of bounds
-        if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow ){
+        if(curCell.x >= 0  && curCell.y >= 0  && curCell.z >= 0 && curCell.x < CellsPerRow  && curCell.y < CellsPerRow  && curCell.z < CellsPerRow) {
             int CurIndex = curCell.z + CellsPerRow*curCell.y+CellsPerRow*CellsPerRow*curCell.x;
             distance= min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance);
         }
@@ -83,18 +99,15 @@ float GetDistanceToClosestPoint(int3 Pos, uint3 Cell)
     return 1-distance; //Invert so point is white instead of black
 }
 
-
 void GetCellBounds(uint cellIndex, float cellSize, uint textureSize,
-                   out float lower, out float size)
-{
+    out float lower, out float size) {
     lower = floor(cellIndex * cellSize);
     float upper = min(ceil((cellIndex + 1) * cellSize), textureSize); 
     size  = upper - lower;
 }
 
 [numthreads(8,8,8)]
-void GenerateWorley(uint3 id : SV_DispatchThreadID)
-{
+void GenerateWorley(uint3 id : SV_DispatchThreadID) {
     if (any(id >= CellsPerRow)) return;
 
     float CellSize = (float)TextureSize / CellsPerRow;
@@ -106,29 +119,40 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID)
 
     for (int x = 0; x < (int)sizeX; x++)
     for (int y = 0; y < (int)sizeY; y++)
-    for (int z = 0; z < (int)sizeZ; z++)
-    {
+    for (int z = 0; z < (int)sizeZ; z++) {
         int3 Pos = int3(lowerX + x, lowerY + y, lowerZ + z);
-        float4 val = ShapeRenderTexture.Load(Pos);
+        float4 val;
+        if(Mode == 0) {
+            val =  ShapeRenderTexture.Load(Pos);
+        }else {
+            val  = DetailRenderTexture.Load(Pos);
+        }
         float dist = GetDistanceToClosestPoint(Pos, id);
 
-        if      (CurLayer == 0) val.x = dist;
+        if (CurLayer == 0 && Mode == 0) val.x = dist*(PerlinNoise[Pos.z+Pos.y*TextureSize+Pos.x*TextureSize*TextureSize]/2+0.5);
+        else if (CurLayer == 0) val.x = dist;
         else if (CurLayer == 1) val.y = dist;
         else if (CurLayer == 2) val.z = dist;
         else if (CurLayer == 3) val.w = dist;
-
-        ShapeRenderTexture[Pos] = val;
+        if(Mode == 0) {
+            ShapeRenderTexture[Pos] = val;
+        }else {
+            DetailRenderTexture[Pos] = val;
+        }
     }
 }
 
 [numthreads(8,8,8)]
-void CombineWorley(uint3 id : SV_DispatchThreadID)
-{
+void CombineWorley(uint3 id : SV_DispatchThreadID) {
     if (any(id >= (uint)TextureSize)) return;
-
-    float4 val = ShapeRenderTexture.Load(int3(id));
-    float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.z*fmbWeights.z + val.w*fmbWeights.w;
-    ShapeRenderTexture[id] = float4(combined, combined, combined, combined);
+    if(Mode == 0) {
+        float4 val = ShapeRenderTexture.Load(int3(id));
+        float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.z*fmbWeights.z + val.w*fmbWeights.w;
+        ShapeRenderTexture[id] = float4(combined, combined, combined, combined);
+    }else {
+        float4 val = DetailRenderTexture.Load(int3(id));
+        float combined = val.x*0.5 + val.y*0.3 + val.z*0.2 ;
+        DetailRenderTexture[id] = float4(combined, combined, combined, 1);
+    }
 }
-
 

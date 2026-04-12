@@ -10,8 +10,8 @@ public class CloudRenderPass : ScriptableRenderPass
     private ComputeShader MergeShader;
     public Bounds Bounds;
     private int _kernel;
-    private RTHandle ShapeHandle;
     public RenderTexture ShapeRenderTexture;
+    public RenderTexture DetailRenderTexture;
     public float DensityThreshold;
     public int StepCount;
     public Vector3 SunPos;
@@ -57,7 +57,6 @@ public class CloudRenderPass : ScriptableRenderPass
         public TextureHandle src;
         public TextureHandle dst;
         public TextureHandle cloudBuffer;
-        public TextureHandle ShapeHandle;
         public int StepCount;
         public Vector3 SunPos;
         public float DensityMultiplier;
@@ -66,9 +65,9 @@ public class CloudRenderPass : ScriptableRenderPass
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
     {
         _shader.SetTexture(_kernel, "ShapeTexture", ShapeRenderTexture);
+        _shader.SetTexture(_kernel, "DetailTexture", DetailRenderTexture);
         var resourceData = frameData.Get<UniversalResourceData>();
         var cameraData = frameData.Get<UniversalCameraData>();
-        TextureHandle LocalShapeHandle = renderGraph.ImportTexture(ShapeHandle);
 
         if (cameraData.camera.cameraType != CameraType.Game) return;
 
@@ -90,13 +89,11 @@ public class CloudRenderPass : ScriptableRenderPass
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
-            data.ShapeHandle = LocalShapeHandle;
             data.SunPos = SunPos;
             data.DensityMultiplier = DensityMultiplier;
 
             builder.UseTexture(data.src);
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
-            builder.UseTexture(data.ShapeHandle);
 
             EnsureCloudBuffer(cameraData.camera.pixelWidth, cameraData.camera.pixelHeight);
             TextureHandle cloudTexture = renderGraph.ImportTexture(_cloudHandle);
@@ -167,6 +164,5 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         _cloudHandle?.Release();
         _cloudBuffer?.Release();
-        ShapeHandle?.Release();
     }
 }
