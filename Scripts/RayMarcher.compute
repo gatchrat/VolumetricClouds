@@ -67,10 +67,12 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
     float softeningScale = 1; //reduce density near walls of bounds to prevent hard cut off. Apply before wrapping etc.
     if (uvw.y > 0.9) {
-        softeningScale = (1- uvw.y) / 0.1;
+        float t = (1 - uvw.y) / 0.1;
+        softeningScale = pow(t, 0.01); // exponent < 1 = slow start, fast end
     }
-    if (uvw.y < 0.1) {
-        softeningScale = uvw.y / 0.1;
+    if (uvw.y < 0.15) {
+        float t = uvw.y / 0.15;
+        softeningScale = pow(t, 0.1);
     }
 
     uvw += Offset;
