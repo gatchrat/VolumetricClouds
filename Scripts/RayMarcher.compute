@@ -114,13 +114,13 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNo
     float energy = 0;
     float transmittance = 1;
     float SunMultiplier = 0.8;
-    float CloudMultiplier = 1; //How fast transmittance falls off -> Big performance impact
+    float CloudMultiplier = 0.1; //How fast transmittance falls off -> Big performance impact
     bool usePowder = true;
 
     float SmallStepSize = 0.5;
     float BigStepSize = SmallStepSize*5;
     float CurstepSize = BigStepSize;  //Start with big steps
-
+    int steps  = 0;
     if (intersection.x <= intersection.y) {
         //Distance to box beginning is closer than distance to hit at the other side -> we aiming into the box
         float rayOffset =  frac(
@@ -144,6 +144,7 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNo
                     pos -=  ray.direction * CurstepSize;
                     CurstepSize = SmallStepSize;
                 }else {
+                    steps++;
                     float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
                     float sunTransmittance = 1;
                     if (sunDensity > 0) {
@@ -174,7 +175,6 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNo
 [numthreads(8, 8, 1)]
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
-    _CloudBuffer[id.xy] =float4(0,0,0,0);
     if(_FrameIndex % 2 == (id.x+id.y) % 2) return; //Render each pixel every other frame
 
     float4 sceneColor = _SrcTex[id.xy];
@@ -188,10 +188,14 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float energy = result.x;
     float transmittance = result.y;
 
-    float4 cloudColor = float4(energy, energy, energy, 1);
+    float4 sunColor = float4(1, 1, 1, 1);
+    float4 ambientLight =  float4(1, 0.4, 0,1);
+    float4 cloudColor = sunColor * energy + ambientLight *transmittance*1;
     //Without energy check get black border around cloud, NOT caused by sampling rough and then detail. Maybe caused by Powder for sun when density to cloud is 0? 
     if(transmittance < 1 && energy > 0) {
         //1 -> we didnt hit nuffin
         _CloudBuffer[id.xy] = cloudColor;
+    }else {
+        _CloudBuffer[id.xy] = sceneColor;
     }
 }

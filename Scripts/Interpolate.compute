@@ -13,6 +13,7 @@ static const int2 offsetsInterpolation[4] = {
 
 [numthreads(8, 8, 1)]
 void Interpolate(uint3 id : SV_DispatchThreadID) {
+    return;
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     if(_FrameIndex % 2 != (id.x+id.y) % 2) return; //Render each pixel every other frame
     if(id.x>0&& id.x < _Resolution.x-1) {
