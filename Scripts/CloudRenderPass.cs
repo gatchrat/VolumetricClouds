@@ -173,6 +173,8 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         _cloudHandle?.Release();
         _cloudBuffer?.Release();
-        _settingsBuffer?.Release();
+        _settingsBuffer?.Dispose();
+        DetailRenderTexture?.Release();
+        ShapeRenderTexture?.Release();
     }
 }
