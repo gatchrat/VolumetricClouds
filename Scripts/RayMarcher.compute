@@ -55,13 +55,6 @@ Ray GenerateRay(uint2 pixelCoord) {
 }
 
 float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
-    //Mipmap scaling from 0 -> 1 tripples fps nearly
-    //TODO scale sampling resolution from transmittance
-    //Check if in bounds
-    if (any(WorldPos > _BoundsMax) || any(WorldPos < _BoundsMin)) {
-        return 0;
-    }
-
     float3 NoiseBoundsMin = _BoundsMin;
     float3 NoiseBoundsMax = _BoundsMax;
     float3 uvw = (WorldPos - NoiseBoundsMin) / (NoiseBoundsMax - NoiseBoundsMin);
@@ -80,7 +73,7 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
 
     float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, Mipmap).x*softeningScale;
     if(Density > DensityThreshold && WithDetail) {
-        float4 detailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2, uvw*15, 0).x;
+        float4 detailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2, uvw*20, 0).x;
         float oneMinusShape = 1 - Density;
         float detailErodeWeight = oneMinusShape * oneMinusShape * oneMinusShape;
         Density = Density - (1-detailNoise) * detailErodeWeight *8;
@@ -94,14 +87,24 @@ float DensityTowardsSun(float3 WorldPos) {
     float2 hit = RayBoxIntersect(_BoundsMin, _BoundsMax, WorldPos, dir);
     float rayLength = max(0, hit.y);
 
-    float stepSize = 1;
-    int SunSteps = 6;
+    float DistanceWalked = 0;
+    int SunSteps = 5;
+
+    float stepSize = 2;
 
     float density = 0;
     float3 samplePos = WorldPos;
 
     for (int j = 0; j < SunSteps; j++) {
+        if(j==SunSteps-1) {
+            stepSize = 1;
+        }
         samplePos += dir *stepSize;
+        DistanceWalked += stepSize;
+        //Check if in bounds
+        if (any(samplePos > _BoundsMax) || any(samplePos < _BoundsMin)) {
+            break;
+        }
         float CurDensity = GetDensityForWorldPos(samplePos,true,j/2);
         if(CurDensity> DensityThreshold) {
             density += CurDensity * stepSize;
@@ -109,18 +112,27 @@ float DensityTowardsSun(float3 WorldPos) {
     }
     return density;
 }
+//Source horizon paper
+float HenyeyGreenstein(float cosAngle, float gForward, float gBackward) {
+    float g2f = gForward * gForward;
+    float g2b = gBackward * gBackward;
+    float forward  = (1.0 - g2f) / (4.0 * 3.14159 * pow(1.0 + g2f - 2.0 * gForward  * cosAngle, 1.5));
+    float backward = (1.0 - g2b) / (4.0 * 3.14159 * pow(1.0 + g2b - 2.0 * gBackward * cosAngle, 1.5));
+    return lerp(forward, backward, 0.5);
+}
 
 float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNoise, int3 id) {
     float energy = 0;
     float transmittance = 1;
     float SunMultiplier = 0.8;
-    float CloudMultiplier = 0.1; //How fast transmittance falls off -> Big performance impact
+    float CloudMultiplier = 0.3; //How fast transmittance falls off -> Big performance impact
     bool usePowder = true;
 
     float SmallStepSize = 0.5;
     float BigStepSize = SmallStepSize*5;
     float CurstepSize = BigStepSize;  //Start with big steps
     int steps  = 0;
+
     if (intersection.x <= intersection.y) {
         //Distance to box beginning is closer than distance to hit at the other side -> we aiming into the box
         float rayOffset =  frac(
@@ -129,12 +141,14 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNo
         rayOffset = 0;//Disable for now, only introduces noise but doesnt really reduce banding :(
         float3 pos = ray.origin+ ray.direction*intersection.x+ray.direction*rayOffset ;
         float maxDist = intersection.y - intersection.x; //Area we want to march
-        float DistanceTraveled = ray.direction*rayOffset; //Count distance traveled to not prevent calculating the distance each step
+        float DistanceTraveled = rayOffset; //Count distance traveled to not prevent calculating the distance each step
+        float cosAngle = dot(-ray.direction, normalize(SunPostion));
+        float HG            = HenyeyGreenstein(cosAngle, 0.2, -0.2);
         while (DistanceTraveled <maxDist) {
             rayOffset = (blueNoise - 0.5) * 0.1 * CurstepSize; 
             rayOffset = 0;
             //Check for StepCount points the light values
-            float density = GetDensityForWorldPos(pos,CurstepSize == SmallStepSize,1-transmittance);
+            float density = GetDensityForWorldPos(pos,CurstepSize == SmallStepSize,0); //Always mipmap level 0 is cheaper than variying because GPU stuff dunno
             if (density > DensityThreshold) {
                 //Density high enough -> We are in a cloud
                 if(CurstepSize == BigStepSize) {
@@ -146,19 +160,14 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNo
                 }else {
                     steps++;
                     float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
-                    float sunTransmittance = 1;
-                    if (sunDensity > 0) {
-                        //0 Density -> Full power, but powder deletes
-                        sunTransmittance = exp(-sunDensity*SunMultiplier);//Beers Law
-                        if(usePowder) {
-                            sunTransmittance *= (1-exp(-sunDensity*2*SunMultiplier)); //Powder
-                        }
-                    }
-                    float curEnergy =  density *CurstepSize* DensityMultiplier  * transmittance * sunTransmittance;
-                    if(usePowder) {
-                        curEnergy *=(1-exp(-density *CloudMultiplier*2)); //TODO Henyey-Greenstein
-                    }
-                    energy +=curEnergy;
+                    float beers         = exp(-sunDensity * SunMultiplier);
+                    float powder        = 1.0 - exp(-sunDensity * SunMultiplier * 0.1);
+                    powder = (powder+0.5)/1.5;
+                    float lightTransmittance = beers * powder * HG;
+                    // density * stepSize is the local sample weight, same as the example code
+                    float curEnergy = density * CurstepSize * DensityMultiplier * transmittance * lightTransmittance;
+                    energy += curEnergy;
+
                     transmittance *= exp(-density *CloudMultiplier*CurstepSize); //The deeper into the cloud the less light escapes
                     if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
                     break;
@@ -190,7 +199,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
 
     float4 sunColor = float4(1, 1, 1, 1);
     float4 ambientLight =  float4(1, 0.4, 0,1);
-    float4 cloudColor = sunColor * energy + ambientLight *transmittance*1;
+    float4 cloudColor = sunColor * energy + ambientLight *transmittance*0.5;
     //Without energy check get black border around cloud, NOT caused by sampling rough and then detail. Maybe caused by Powder for sun when density to cloud is 0? 
     if(transmittance < 1 && energy > 0) {
         //1 -> we didnt hit nuffin
