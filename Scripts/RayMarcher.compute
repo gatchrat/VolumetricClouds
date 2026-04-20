@@ -24,7 +24,10 @@ cbuffer _CloudSettings {
     float _pad1;
     float DensityThreshold;
     float DensityMultiplier;
-    int StepCount;
+    float TransmittanceFalloff;
+    float PowderEffect;
+    float BeersEffect;
+    float SunDensityImpact;
 };
 
 struct Ray {
@@ -68,8 +71,8 @@ float GetDensityForWorldPos(float3 WorldPos, bool WithDetail, float Mipmap) {
         softeningScale = pow(t, 0.1);
     }
 
-    uvw += Offset;
     uvw *=Scale;
+    uvw += Offset*0.1;
 
     float Density = ShapeTexture.SampleLevel(linearRepeatSampler, uvw, Mipmap).x*softeningScale;
     if(Density > DensityThreshold && WithDetail) {
@@ -110,6 +113,10 @@ float DensityTowardsSun(float3 WorldPos) {
             density += CurDensity * stepSize;
         }
     }
+    float transmittance = exp(-density * SunDensityImpact);
+    float darknessThreshold = 0.15;
+    return darknessThreshold + transmittance * (1 - darknessThreshold); // return light, not density
+
     return density;
 }
 //Source horizon paper
@@ -124,12 +131,10 @@ float HenyeyGreenstein(float cosAngle, float gForward, float gBackward) {
 float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNoise, int3 id) {
     float energy = 0;
     float transmittance = 1;
-    float SunMultiplier = 0.8;
-    float CloudMultiplier = 0.3; //How fast transmittance falls off -> Big performance impact
     bool usePowder = true;
 
     float SmallStepSize = 0.5;
-    float BigStepSize = SmallStepSize*5;
+    float BigStepSize = 25;
     float CurstepSize = BigStepSize;  //Start with big steps
     int steps  = 0;
 
@@ -160,15 +165,16 @@ float2 CalculateEnergyAndTransmittance(Ray ray, float2 intersection,float blueNo
                 }else {
                     steps++;
                     float sunDensity = DensityTowardsSun(pos); //How much Cloud is between the point and the sun
-                    float beers         = exp(-sunDensity * SunMultiplier);
-                    float powder        = 1.0 - exp(-sunDensity * SunMultiplier * 0.1);
-                    powder = (powder+0.5)/1.5;
-                    float lightTransmittance = beers * powder * HG;
+                    float beers         = exp(-sunDensity * SunDensityImpact); 
+                    beers = 1-((1-beers)*(BeersEffect/100)); //Scale how much powder kann subtract from 1
+                    float powder        = 1.0 - exp(-sunDensity * SunDensityImpact * 0.1);
+                    powder = 1-((1-powder)*(PowderEffect/100)); //Scale how much powder kann subtract from 1
+                    float lightTransmittance = beers * powder*HG ;
                     // density * stepSize is the local sample weight, same as the example code
                     float curEnergy = density * CurstepSize * DensityMultiplier * transmittance * lightTransmittance;
                     energy += curEnergy;
 
-                    transmittance *= exp(-density *CloudMultiplier*CurstepSize); //The deeper into the cloud the less light escapes
+                    transmittance *= exp(-density *TransmittanceFalloff*CurstepSize); //The deeper into the cloud the less light escapes
                     if (transmittance < 0.01) // Future light will be irrelevant -> skip rest
                     break;
                 }
@@ -197,11 +203,15 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float energy = result.x;
     float transmittance = result.y;
 
-    float4 sunColor = float4(1, 1, 1, 1);
     float4 ambientLight =  float4(1, 0.4, 0,1);
-    float4 cloudColor = sunColor * energy + ambientLight *transmittance*0.5;
+    float contrastMin = 0.35;
+    float contrastMax = 0.8;
+
     //Without energy check get black border around cloud, NOT caused by sampling rough and then detail. Maybe caused by Powder for sun when density to cloud is 0? 
-    if(transmittance < 1 && energy > 0) {
+    if(transmittance <1) {
+        energy = saturate((energy - contrastMin) / (contrastMax - contrastMin));
+        float4 sunColor = float4(energy, energy, energy, 1-transmittance);
+        float4 cloudColor = sunColor ;
         //1 -> we didnt hit nuffin
         _CloudBuffer[id.xy] = cloudColor;
     }else {

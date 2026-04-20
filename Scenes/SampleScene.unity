@@ -399,6 +399,10 @@ MonoBehaviour:
   DensityThreshold: 0.7
   StepCount: 100
   DensityMultiplier: 200
+  TransmittanceFalloff: 0.3
+  PowderEffect: 99.6
+  BeersEffect: 100
+  SunDensityImpact: 0.8
   Scale: {x: 6, y: 0.1, z: 6}
   Offset: {x: 0, y: 0, z: 0}
   CloudsBounds: {fileID: 764791172}

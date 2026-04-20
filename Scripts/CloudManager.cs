@@ -14,7 +14,10 @@ public struct CloudSettings
     public float _pad1;
     public float DensityThreshold;
     public float DensityMultiplier;
-    public int StepCount;
+    public float TransmittanceFalloff;
+    public float PowderEffect;
+    public float BeersEffect;
+    public float SunDensityImpact;
 }
 
 public class CloudManager : MonoBehaviour
@@ -31,6 +34,14 @@ public class CloudManager : MonoBehaviour
     public float DensityThreshold = 0.7f; //Used in Renderpass
     public int StepCount = 4;
     public float DensityMultiplier = 1f;
+    [Range(0.1f, 1f)]
+    public float TransmittanceFalloff = 0.3f;
+    [Range(0f, 100f)]
+    public float PowderEffect = 100f;
+    [Range(0f, 100f)]
+    public float BeersEffect = 100f;
+    [Range(0.2f, 2f)]
+    public float SunDensityImpact = 0.8f;
     public Vector3 Scale = new Vector3(1, 1, 1);
     public Vector3 Offset;
     public Transform CloudsBounds;
@@ -48,7 +59,10 @@ public class CloudManager : MonoBehaviour
     void Update()
     {
         cloudSettings.DensityMultiplier = DensityMultiplier;
-        cloudSettings.StepCount = StepCount;
+        cloudSettings.TransmittanceFalloff = TransmittanceFalloff;
+        cloudSettings.PowderEffect = PowderEffect;
+        cloudSettings.BeersEffect = BeersEffect;
+        cloudSettings.SunDensityImpact = SunDensityImpact;
         cloudSettings.Scale = Scale;
         cloudSettings.DensityThreshold = DensityThreshold;
         cloudSettings.Offset = Offset;
