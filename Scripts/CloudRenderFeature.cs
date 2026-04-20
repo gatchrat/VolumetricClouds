@@ -8,6 +8,7 @@ public class CloudRendererFeature : ScriptableRendererFeature
     public ComputeShader MergeShader;
 
     private CloudRenderPass _pass;
+    private CloudManager Manager;
 
     public override void Create()
     {
@@ -18,7 +19,8 @@ public class CloudRendererFeature : ScriptableRendererFeature
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
     {
         if (_pass == null) return;
-        var Manager = Object.FindAnyObjectByType<CloudManager>();
+        if (Manager == null)
+            Manager = Object.FindAnyObjectByType<CloudManager>();
         if (Manager == null || Manager.ShapeRenderTexture == null) return;
 
         _pass.ShapeRenderTexture = Manager.ShapeRenderTexture;
