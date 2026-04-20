@@ -32,4 +32,9 @@ public class CloudRendererFeature : ScriptableRendererFeature
         _pass.SunPos = Manager.Sun.position;
         renderer.EnqueuePass(_pass);
     }
+    protected override void Dispose(bool disposing)
+    {
+        _pass?.Dispose();
+        _pass = null;
+    }
 }

@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering.RenderGraphModule;
-using Unity.ProjectAuditor.Editor.Core;
 
 public class CloudRenderPass : ScriptableRenderPass
 {
@@ -173,7 +172,7 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         _cloudHandle?.Release();
         _cloudBuffer?.Release();
-        _settingsBuffer?.Dispose();
+        _settingsBuffer?.Release();
         DetailRenderTexture?.Release();
         ShapeRenderTexture?.Release();
     }
