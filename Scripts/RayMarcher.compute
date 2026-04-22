@@ -218,3 +218,95 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         _CloudBuffer[id.xy] = sceneColor;
     }
 }
+float RemapRange(float val,float oldMin, float oldMax,float newMin, float newMax) {
+    return newMin+saturate((val-oldMin)/(oldMax-oldMin))*(newMax-newMin);
+}
+float CLOUD_TOP = 3500;
+float CLOUD_BOTTOM = 175;
+
+float GetCloudDensity(float3 WorldPos) {
+    float cloudCoverage = 1; //Implement 2.3.4 above adjusted cloud coverage
+    float cloudHeightScale = 1;
+    float ShapeTiling = 0.001;
+    float3 ShapeNoisePos = WorldPos*ShapeTiling;
+    float2 ShapeNoise = ShapeTexture.SampleLevel(linearRepeatSampler, ShapeNoisePos, 0).xy;
+    float ShapePerlin = ShapeNoise.y;
+    float ShapeWorley = ShapeNoise.x;
+    float3 DetailNoisePos = ShapeNoisePos*8;
+    float DetailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2,DetailNoisePos,0).x;
+    float CloudMinHeight = 10;//offset inside bounds?
+    float height = WorldPos.y - CloudMinHeight;
+    float topHeight = RemapRange(cloudHeightScale,0,1,0.7*CLOUD_BOTTOM,CLOUD_TOP);
+    float bottomHeight = ShapeWorley*CLOUD_BOTTOM;
+    float topHeightFade = RemapRange(height,bottomHeight,bottomHeight+CLOUD_BOTTOM,0,1);
+    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+CLOUD_BOTTOM,0,1);
+    float heightShift = RemapRange(height,CLOUD_BOTTOM,topHeight,1,0)*bottomHeightFade;
+    float noiseShift = 0.05*(1-heightShift);
+    float thresholdShift  = 0.1*heightShift;
+    float heightFade = topHeightFade*bottomHeightFade;
+    float noiseScale = RemapRange(height/topHeight,0,0.5,0.5,1);
+    float Density = RemapRange(ShapePerlin-noiseShift,ShapeWorley-thresholdShift,1,0,1);
+    Density = RemapRange(Density,1-cloudCoverage,1,0,1);
+    Density *= heightFade;
+    Density *=cloudCoverage;
+    Density = RemapRange(Density,0.4*DetailNoise*noiseScale,1,0,1);
+    return Density;
+}
+float RayMarch() {
+    float3 sunDir = normalize(SunPostion);
+    float stepSize = 50;
+    float ShadowStepSize = 200;
+    float betaE = ??;
+    float sigS_over_sigE = 1;
+    float VdotL = dot(viewDir,sunDir);
+
+    float t = tMin;
+    float transmittance = 1;
+    float sunInScatterN0 = 0;
+    float sunInScatterN1 =0;
+    float ambientInScatterN = 0;
+    float distSum = 0;
+    while(t<tMax) {
+        float3 samplePos = viewPos +t*viewDir;
+        float density = GetCloudDensity(samplePos);
+        float shadowOpticalDepth = 0; {
+            float3 samplePosShadow = samplePos;
+            float prevShadowDensity = density;
+            for(int i=0;i<numShadowSteps;++i) {
+                samplePosShadow += ShadowStepSize*sunDir;
+                float shadowDensity = GetCloudDensity(samplePosShadow);
+                shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
+                prevShadowDensity = shadowDensity;
+            }
+        }
+        float sigE = betaE*density;
+        float powder = 4.0*(1.0-exp(-2.0*density));
+        float shadowTransmittance = exp(-shadowOpticalDepth);
+        float nextTransmittance = transmittance*exp(-sigE*stepSize);
+        float _dTr = transmittance-nextTransmittance;
+
+        sunInScatterN0 += sigS_over_sigE*powder*shadowTransmittance*_dTr;
+        sunInScatterN1 += 0.5*sigS_over_sigE*powder*sqrt(shadowTransmittance)*_dTr;
+        ambientInScatterN += sigS_over_sigE *powder*_dTr;
+        distSum +=t*_dTr;
+
+        t+=stepSize;
+        transmittance = nextTransmittance;
+    }
+
+    float anisotropyFront = 0.8;
+    float anisotropyBack = -0.3;
+    float backLobeWeight = 0.1;
+    sunInScatterN0 *= HGPhase2Lobe(VdotL,anisotropyFront,anisotropyBack,backLobeWeight);
+    sunInScatterN1 *= HGPhase2Lobe(VdotL,0.5*anisotropyFront,0.5*anisotropyBack,backLobeWeight);
+    ambientInScatterN *= 1.0/(4.0*PI);
+
+    float avgCloudDist = distSum /(1-transmittance);
+    float3 avgCloudPos = viewPos +avgCloudDist*viewDir;
+
+    float3 sunAtmTransmittance = ??;
+    float3 ambientIrradiance = ??;
+
+    float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance;
+    float inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
+}
