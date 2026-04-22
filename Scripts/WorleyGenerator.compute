@@ -84,7 +84,7 @@ float GetDistanceToClosestPoint(float3 Pos, uint3 Cell) {
             distance= min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance);
     }
     distance = distance/maxDistance;
-    return 1-distance; //Invert so point is white instead of black
+    return distance;
 }
 
 float GetDistanceToClosestPointDetail(float3 Pos, uint3 Cell) {
@@ -132,8 +132,7 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID) {
 
         float dist = GetDistanceToClosestPoint(Pos, id);
 
-        if (CurLayer == 0 && Mode == 0) val.x = dist*(PerlinNoise[Pos.z+Pos.y*TextureSize+Pos.x*TextureSize*TextureSize]/2+0.5);
-        else if (CurLayer == 0) val.x = dist;
+         if (CurLayer == 0) val.x = dist;
         else if (CurLayer == 1) val.y = dist;
         else if (CurLayer == 2) val.z = dist;
         else if (CurLayer == 3) val.w = dist;
@@ -172,18 +171,17 @@ void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
 void CombineWorley(uint3 id : SV_DispatchThreadID) {
     if (any(id >= (uint)TextureSize)) return;
     float4 val = ShapeRenderTexture.Load(id);
-    float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.z*fmbWeights.z + val.w*fmbWeights.w;
-    float weightSum =fmbWeights.x + fmbWeights.y + fmbWeights.z + fmbWeights.w;
-    combined /= weightSum;
-    ShapeRenderTexture[id] = float4(combined, combined, combined, combined);
+    float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.w*fmbWeights.z; //Leave 20 for Perlin
+    float Perlin =lerp(PerlinNoise[id.z+id.y*TextureSize+id.x*TextureSize*TextureSize]+0.5,1,0.1*(2*val.z-1));
+    ShapeRenderTexture[id] = float4(1-combined, Perlin, 0, 1);
 }
 
 [numthreads(8,8,8)]
 void CombineWorleyDetail(uint3 id : SV_DispatchThreadID) {
     if (any(id >= (uint)TextureSize)) return;
     float4 val = DetailRenderTexture.Load(id);
-    float combined = val.x*0.5 + val.y*0.3 + val.z*0.2 ;
+    float combined = val.x*0.625 + val.y*0.25 + val.z*0.125 ;
     
-    DetailRenderTexture[id] = float4(combined, combined, combined, 1);
+    DetailRenderTexture[id] = float4(combined, 0, 0, 1);
 }
 

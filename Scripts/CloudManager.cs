@@ -29,7 +29,7 @@ public class CloudManager : MonoBehaviour
     public Texture2D BlueNoise;
     public int[] ShapeWosleyCellCount = new int[] { 4, 6, 8, 12 };
     public int[] DetailWosleyCellCount = new int[] { 16, 24, 32 };
-    public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f, 0.2f };
+    public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f };
     public ComputeShader WorleyComputer;
     public float DensityThreshold = 0.7f; //Used in Renderpass
     public int StepCount = 4;
@@ -132,7 +132,6 @@ public class CloudManager : MonoBehaviour
         CurrentKernel = WorleyComputer.FindKernel("GenerateWorley");
         WorleyComputer.SetInt("Mode", 0);
         WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
-        WorleyComputer.SetBuffer(CurrentKernel, "PerlinNoise", PerlinNoiseBuffer);
         WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsA", ShapeWorleyPointsA);
         WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsR", ShapeWorleyPointsR);
         WorleyComputer.SetBuffer(CurrentKernel, "ShapeWorleyPointsG", ShapeWorleyPointsG);
@@ -162,8 +161,8 @@ public class CloudManager : MonoBehaviour
 
         CurrentKernel = WorleyComputer.FindKernel("CombineWorley");
         WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
-        WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2], fBmWeights[3]);
-        WorleyComputer.SetInt("Mode", 0);
+        WorleyComputer.SetBuffer(CurrentKernel, "PerlinNoise", PerlinNoiseBuffer);
+        WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2]);
 
         int groups = Mathf.CeilToInt(ShapeTextureSize / 8f);
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
@@ -209,7 +208,7 @@ public class CloudManager : MonoBehaviour
         CurrentKernel = WorleyComputer.FindKernel("CombineWorleyDetail");
         WorleyComputer.SetTexture(CurrentKernel, "DetailRenderTexture", DetailRenderTexture);
         WorleyComputer.SetInt("Mode", 1);
-        WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2], fBmWeights[3]);
+        WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2]);
 
         groups = Mathf.CeilToInt(32 / 8f);
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
