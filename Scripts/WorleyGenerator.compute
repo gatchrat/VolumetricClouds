@@ -84,7 +84,8 @@ float GetDistanceToClosestPoint(float3 Pos, uint3 Cell) {
             distance= min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance);
     }
     distance = distance/maxDistance;
-    return distance;
+    distance = distance*distance;
+    return 1-distance;
 }
 
 float GetDistanceToClosestPointDetail(float3 Pos, uint3 Cell) {
@@ -102,7 +103,7 @@ float GetDistanceToClosestPointDetail(float3 Pos, uint3 Cell) {
             distance= min(GetDistanceBetween(Pos, DetailWorleyPoints[CurIndex]),distance);
     }
     distance = distance/maxDistance;
-    return 1-distance; //Invert so point is white instead of black
+    return distance; //Invert so point is white instead of black
 }
 
 void GetCellBounds(uint cellIndex, float cellSize, uint textureSize,
@@ -173,7 +174,7 @@ void CombineWorley(uint3 id : SV_DispatchThreadID) {
     float4 val = ShapeRenderTexture.Load(id);
     float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.w*fmbWeights.z; //Leave 20 for Perlin
     float Perlin =lerp(PerlinNoise[id.z+id.y*TextureSize+id.x*TextureSize*TextureSize]+0.5,1,0.1*(2*val.z-1));
-    ShapeRenderTexture[id] = float4(1-combined, Perlin, 0, 1);
+    ShapeRenderTexture[id] = float4(combined, Perlin, 0, 1);
 }
 
 [numthreads(8,8,8)]
