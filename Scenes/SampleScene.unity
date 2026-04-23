@@ -419,7 +419,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FreeCam
   movementSpeed: 10
-  fastMovementSpeed: 100
+  fastMovementSpeed: 1000
   freeLookSensitivity: 3
   zoomSensitivity: 10
   fastZoomSensitivity: 50

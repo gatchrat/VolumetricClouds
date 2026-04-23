@@ -1,15 +1,12 @@
 using UnityEngine;
 using System;
-using UnityEditor;
-using Unity.VisualScripting;
-using UnityEngine.UIElements;
 using UnityEngine.Experimental.Rendering;
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct CloudSettings
 {
     public Vector3 Offset;
-    public float _pad0;
+    public float _pad0; //Padding to align buffer in memory, otherwise refuses to work
     public Vector3 Scale;
     public float _pad1;
     public float DensityThreshold;
@@ -173,88 +170,5 @@ public class CloudManager : MonoBehaviour
 
         ShapeRenderTexture.GenerateMips();
         DetailRenderTexture.GenerateMips();
-    }
-
-    private float[] CreatePerlinNoise(RenderTexture renderTexture)
-    {
-        int curIndex = 0;
-        float[] PerlinValues = new float[ShapeTextureSize * ShapeTextureSize * ShapeTextureSize];
-        FastNoiseLite noise = new FastNoiseLite();
-        float noiseScale = 10f;
-        noise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
-
-        for (int x = 0; x < ShapeTextureSize; x++)
-            for (int y = 0; y < ShapeTextureSize; y++)
-                for (int z = 0; z < ShapeTextureSize; z++)
-                {
-                    PerlinValues[curIndex++] = (noise.GetNoise(x * noiseScale, y * noiseScale, z * noiseScale) + 1) / 2; //Function is -1 till +1 we want 0 to 1      
-                    if (PerlinValues[curIndex - 1] > 1 || PerlinValues[curIndex - 1] <= 0)
-                    {
-                        Debug.Log(PerlinValues[curIndex - 1]);
-                    }
-                }
-        return PerlinValues;
-    }
-
-    //Creates Randomly positioned Points in each of the cells
-    private Vector3[] CreateWorleyPoints(int TextureSize, int CellsPerRow)
-    {
-        int curIndex = 0;
-        Vector3[] WorleyPoints = new Vector3[(int)Math.Pow(CellsPerRow + 2, 3)];
-        float cellSize = (float)TextureSize / CellsPerRow;
-
-        for (int x = -1; x < CellsPerRow + 1; x++)
-            for (int y = -1; y < CellsPerRow + 1; y++)
-                for (int z = -1; z < CellsPerRow + 1; z++)
-                {
-
-
-                    float lowerX = Mathf.Floor(x * cellSize);
-                    float upperX = Mathf.Min(Mathf.Ceil((x + 1) * cellSize), TextureSize);
-                    float sizeX = upperX - lowerX;
-
-                    float lowerY = Mathf.Floor(y * cellSize);
-                    float upperY = Mathf.Min(Mathf.Ceil((y + 1) * cellSize), TextureSize);
-                    float sizeY = upperY - lowerY;
-
-                    float lowerZ = Mathf.Floor(z * cellSize);
-                    float upperZ = Mathf.Min(Mathf.Ceil((z + 1) * cellSize), TextureSize);
-                    float sizeZ = upperZ - lowerZ;
-
-                    WorleyPoints[curIndex++] = new Vector3(
-                        lowerX + UnityEngine.Random.Range(0f, sizeX),
-                        lowerY + UnityEngine.Random.Range(0f, sizeY),
-                        lowerZ + UnityEngine.Random.Range(0f, sizeZ)
-                    );
-                }
-        // Helper to convert (x,y,z) in [-1, CellsPerRow] to flat index
-        int ToIndex(int x, int y, int z) =>
-            (x + 1) * (CellsPerRow + 2) * (CellsPerRow + 2) +
-            (y + 1) * (CellsPerRow + 2) +
-            (z + 1);
-
-        // Second pass: override border cells with wrapped core points + tile offset
-        for (int x = -1; x < CellsPerRow + 1; x++)
-            for (int y = -1; y < CellsPerRow + 1; y++)
-                for (int z = -1; z < CellsPerRow + 1; z++)
-                {
-                    bool isBorder = x == -1 || x == CellsPerRow ||
-                                    y == -1 || y == CellsPerRow ||
-                                    z == -1 || z == CellsPerRow;
-                    if (!isBorder) continue;
-
-                    int cx = ((x % CellsPerRow) + CellsPerRow) % CellsPerRow;
-                    int cy = ((y % CellsPerRow) + CellsPerRow) % CellsPerRow;
-                    int cz = ((z % CellsPerRow) + CellsPerRow) % CellsPerRow;
-
-                    Vector3 core = WorleyPoints[ToIndex(cx, cy, cz)];
-
-                    float offsetX = (x < 0 ? -1 : x >= CellsPerRow ? 1 : 0) * TextureSize;
-                    float offsetY = (y < 0 ? -1 : y >= CellsPerRow ? 1 : 0) * TextureSize;
-                    float offsetZ = (z < 0 ? -1 : z >= CellsPerRow ? 1 : 0) * TextureSize;
-
-                    WorleyPoints[ToIndex(x, y, z)] = core + new Vector3(offsetX, offsetY, offsetZ);
-                }
-        return WorleyPoints;
     }
 }

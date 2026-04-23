@@ -51,7 +51,7 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID) {
 }
 
 [numthreads(8,8,8)]
-void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
+void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) { //Different kernel because i possibly had some cross writing between buffers before. Probably just skill-issue
     if (any(id >= TextureSize)) return;
     float3 cellPos =  float3(id)/float(TextureSize)*float(CellsPerRow);
     int3 CellId = int3(cellPos);

@@ -2,7 +2,7 @@
 
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _CloudBuffer;
-Texture2D<float>    _DepthTex;        // scene depth - READ only
+Texture2D<float>    _DepthTex;
 RWTexture2D<float>  _CloudDepthTex;
 Texture3D<float4> ShapeTexture;
 Texture3D<float4> DetailTexture;
@@ -36,6 +36,7 @@ struct Ray {
     float3 direction;
 };
 
+//Currently unused
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
     float3 t0 = (boundsMin - rayOrigin) / rayDir;
     float3 t1 = (boundsMax - rayOrigin) / rayDir;
@@ -47,6 +48,7 @@ float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, flo
 }
 
 Ray GenerateRay(uint2 pixelCoord) {
+    //Convert Pixel to World Pos and Direction
     float2 uv = ((float2)pixelCoord / _Resolution) * 2.0 - 1.0;
     float4 viewDir = mul(_CameraInverseProjection, float4(uv, 0.0, 1.0));
     viewDir /= viewDir.w;
@@ -58,15 +60,20 @@ Ray GenerateRay(uint2 pixelCoord) {
     return ray;
 }
 
+//3/10 --> 1.5/5
 float RemapRange(float val,float oldMin, float oldMax,float newMin, float newMax) {
     return newMin+saturate((val-oldMin)/(oldMax-oldMin))*(newMax-newMin);
 }
 
 static  float CLOUD_TOP = 3500.0;
 static  float  CLOUD_BOTTOM = 175.0;
+
 float GetCloudDensity(float3 WorldPos) {
-    float cloudCoverage = 0.6; //Implement 2.3.4 above adjusted cloud coverage
     float cloudHeightScale = 1;
+    float cloudCoverage = 0.6; //TODO Coverage map. Ideally paintable ingame
+    float minAdjCloudCoverage = saturate(0.0127 / (cloudHeightScale + 0.153));
+    float maxAdjCloudCoverage = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
+    float adjCloudCoverage = lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
 
     float ShapeTiling = 0.0001;
     float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
@@ -78,24 +85,21 @@ float GetCloudDensity(float3 WorldPos) {
     float3 DetailNoisePos = ShapeNoisePos*8.0;
     float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
 
-    float CloudMinHeight = 20;//offset inside bounds?
-    float height = WorldPos.y - CloudMinHeight;//165-3490
+    //Doom height scaling
+    float CloudMinHeight = 20;
+    float height = WorldPos.y - CloudMinHeight;
     float topHeight = RemapRange(cloudHeightScale,0.0,1.0,0.7*CLOUD_BOTTOM,CLOUD_TOP); //always Cloud_top since cloudHeightScale = 1 
     topHeight = CLOUD_TOP;
-    float bottomHeight = ShapeWorley*CLOUD_BOTTOM;//0-175
-    float topHeightFade = RemapRange(height/topHeight,0.8,1.1,1.0,0.0);//height is 165-3490 how is the remap supposed to work???
-    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+CLOUD_BOTTOM,0.0,1.0);//height is 165-3490 how is the remap supposed to work???
-    float heightShift = RemapRange(height,CLOUD_BOTTOM,topHeight,1.0,0.0)*bottomHeightFade;//guh?
+    float bottomHeight = ShapeWorley*CLOUD_BOTTOM;
+    float topHeightFade = RemapRange(height/topHeight,0.8,1.1,1.0,0.0);
+    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+CLOUD_BOTTOM,0.0,1.0);
+    float heightShift = RemapRange(height,CLOUD_BOTTOM,topHeight,1.0,0.0)*bottomHeightFade;
     float noiseShift = 0.05*(1.0-heightShift);
     float thresholdShift  = 0.1*heightShift;
     float heightFade = topHeightFade*bottomHeightFade;
     float noiseScale = RemapRange(height/topHeight,0.0,0.5,0.5,1.0);
+
     float Density = RemapRange(ShapePerlin-noiseShift,ShapeWorley-thresholdShift,1.0,0.0,1.0);
-    float minAdjCloudCoverage = saturate(0.0127 / (cloudHeightScale + 0.153));
-    float maxAdjCloudCoverage = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
-
-    float adjCloudCoverage = lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
-
     Density = RemapRange(Density, 1.0 - adjCloudCoverage, 1.0, 0.0, 1.0);
     Density *= heightFade;
     Density *=cloudCoverage;
@@ -106,16 +110,18 @@ float GetCloudDensity(float3 WorldPos) {
 float HGPhase (float cos_angle , float inG) {
     return ((1.0 - inG * inG) / pow ((1.0 + inG * inG -2.0 * inG * cos_angle) , 3.0 / 2.0)) / 4.0 * 3.1415;
 }
+//Doom
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
+//Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth) {
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunPostion);
     float stepSize = 50;
     float ShadowStepSize = 200;
-    float betaE =  0.05;//Extinction coeff at cloud density = 1, value guessed
-    float sigS_over_sigE = 1.0;
+    float betaE =  0.05;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
+    float sigS_over_sigE = 1.0; //general energy multiplier
     float VdotL = dot(viewDir,sunDir);
 
     float t = tMin;
@@ -125,8 +131,9 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float ambientInScatterN = 0.0;
     float ambientInScatterNNoPowder = 0.0;
     float distSum = 0.0;
+    //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
-        float3 samplePos = viewPos +t*viewDir;
+        float3 samplePos = viewPos +t*viewDir; //TODO Jitter based on blue noise
         float density = GetCloudDensity(samplePos);
         float shadowOpticalDepth = 0.0; 
         if(density > 0) {
@@ -134,6 +141,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             float3 samplePosShadow = samplePos;
             float prevShadowDensity = density;
             for(int i=0;i<numShadowSteps;++i) {
+                //TODO replace by pre-caclced values
                 samplePosShadow += ShadowStepSize*sunDir;
                 float shadowDensity = GetCloudDensity(samplePosShadow);
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
@@ -146,8 +154,10 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         float nextTransmittance = transmittance*exp(-sigE*stepSize);
         float _dTr = transmittance-nextTransmittance;
 
-        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.35)*shadowTransmittance*_dTr;
-        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.35)*sqrt(shadowTransmittance)*_dTr;
+        //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
+        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.35)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
+        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.35)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+
         ambientInScatterN += sigS_over_sigE *powder*_dTr;
         distSum +=t*_dTr;
 
@@ -159,27 +169,30 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float anisotropyFront = 0.8;
     float anisotropyBack = -0.3;
     float backLobeWeight = 0.1;
+
+    //Angle aligns with directly looking at sun -> extra light because sun doesnt like going around corners :P
     sunInScatterN0 *= HGPhase2Lobe(VdotL,anisotropyFront,anisotropyBack,backLobeWeight);
     sunInScatterN1 *= HGPhase2Lobe(VdotL,0.5*anisotropyFront,0.5*anisotropyBack,backLobeWeight);
+
     ambientInScatterNNoPowder = (1-transmittance)*sigS_over_sigE;
-    ambientInScatterN = lerp(ambientInScatterNNoPowder,ambientInScatterN,0.35);
+    ambientInScatterN = lerp(ambientInScatterNNoPowder,ambientInScatterN,0.35);//Lerp powder, because lowkey cringe for dark borders around cloud
     ambientInScatterN *= 1.0/(4.0*3.1415);
 
     float avgCloudDist = distSum /(1.0-transmittance);
-    depth = avgCloudDist;
-    float3 avgCloudPos = viewPos +avgCloudDist*viewDir;
+    depth = avgCloudDist; //Possible depth based smoothing and used to not smooth two different clouds together
+    float3 avgCloudPos = viewPos +avgCloudDist*viewDir; //Unused for now
 
     float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
     float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0)/1.2; 
     //float3 sunIrradianceOuterSpace = float3(8.0, 2, 0); 
-    float3 ambientIrradiance       = float3(0.4, 0.5,  0.7);  // sky blue
+    float3 ambientIrradiance       = float3(0.4, 0.5,  0.7);  // sky blue Ambient color
 
-    float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance;
+    float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance; //TODO if i dont implement the fancy atmosphere stuff just replace by single color value
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
     return float4(inScatter,1-transmittance);
 }
 float2 IntersectCloudLayer(Ray ray) {
-    float Steigung = ray.direction.y;
+    float Steigung = ray.direction.y; // We only need steigung to check if and when we will hit cloud layer from our pos
 
     bool insideLayer = ray.origin.y >= CLOUD_BOTTOM && ray.origin.y <= CLOUD_TOP;
 
@@ -189,16 +202,15 @@ float2 IntersectCloudLayer(Ray ray) {
         float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
         float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
         float tExit = Steigung > 0 ? tTop : tBottom;
-        if (tExit < 0) return float2(-1, -1); // moving parallel-ish or away
+        if (tExit < 0) return float2(-1, -1); //funny blue line on the middle of my nice clouds
         return float2(0, tExit);
     } else {
         if (abs(Steigung) < 0.01) return float2(-1, -1);
         float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
         float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
-        // Outside: must enter and exit
         float tEnter = Steigung > 0 ? tBottom : tTop;
         float tExit  = Steigung > 0 ? tTop    : tBottom;
-        if (tEnter < 0 || tExit < tEnter) return float2(-1, -1); // behind or no hit
+        if (tEnter < 0 || tExit < tEnter) return float2(-1, -1); 
         return float2(tEnter, tExit);
     }
 }
@@ -212,7 +224,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    float4 sceneColor = _SrcTex[id.xy]; // fix pixel coords to full scale
+    float4 sceneColor = _SrcTex[id.xy]; // fix pixel coords to full scale. Causes floor appearing in the scy
     Ray ray = GenerateRay(id.xy);
     float2 intersection = IntersectCloudLayer(ray);
 
@@ -224,8 +236,8 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
     if(result.w > 0) {
         sceneColor.w = 1-result.w;
-        float4 finalColor = result*result.w+sceneColor*sceneColor.w;
-        finalColor.w = 1;
+        float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
+        finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
         _CloudBuffer[id.xy] = finalColor;
     }else {
         _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
