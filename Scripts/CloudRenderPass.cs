@@ -15,11 +15,14 @@ public class CloudRenderPass : ScriptableRenderPass
     public Texture2D BlueNoiseTexture;
     public Vector3 SunPos;
     private RenderTexture _cloudBuffer;
+    private CloudSettings _lastSettings;
 
     private RTHandle _cloudHandle; // persistent field
-
+    private RTHandle _blueNoiseHandle;
     private void EnsureCloudBuffer(int width, int height)
     {
+        if (_blueNoiseHandle == null)
+            _blueNoiseHandle = RTHandles.Alloc(BlueNoiseTexture);
         if (_cloudBuffer != null && _cloudBuffer.width == width && _cloudBuffer.height == height)
             return;
 
@@ -39,7 +42,11 @@ public class CloudRenderPass : ScriptableRenderPass
         if (_settingsBuffer == null)
             _settingsBuffer = new ComputeBuffer(1, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
 
-        _settingsBuffer.SetData(new CloudSettings[] { settings });
+        if (!settings.Equals(_lastSettings))
+        {
+            _settingsBuffer.SetData(new CloudSettings[] { settings });
+            _lastSettings = settings;
+        }
     }
 
     public CloudRenderPass(ComputeShader shader, ComputeShader InterShader, ComputeShader MShader)
@@ -97,7 +104,7 @@ public class CloudRenderPass : ScriptableRenderPass
             data.SunPos = SunPos;
             data.settingsBuffer = _settingsBuffer;
 
-            TextureHandle blueNoiseHandle = renderGraph.ImportTexture(RTHandles.Alloc(BlueNoiseTexture));
+            TextureHandle blueNoiseHandle = renderGraph.ImportTexture(_blueNoiseHandle);
             data.blueNoiseHandle = blueNoiseHandle;
             builder.UseTexture(data.blueNoiseHandle);
 

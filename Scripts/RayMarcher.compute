@@ -5,9 +5,7 @@ RWTexture2D<float4> _CloudBuffer;
 Texture3D<float4> ShapeTexture;
 Texture3D<float4> DetailTexture;
 Texture2D<float4> BlueNoise;
-SamplerState linearRepeatSampler;
-SamplerState linearRepeatSampler_2;
-SamplerState linearRepeatSampler_3;
+SamplerState sampler_Trilinear_repeat;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
@@ -70,12 +68,12 @@ float GetCloudDensity(float3 WorldPos) {
     float ShapeTiling = 0.0001;
     float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
     ShapeNoisePos.y = RemapRange(ShapeNoisePos.y,0,1,0,1);
-    float2 ShapeNoise = ShapeTexture.SampleLevel(linearRepeatSampler, ShapeNoisePos, 0).xy;
+    float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos, 0).xy;
     float ShapeWorley = ShapeNoise.x;
     float ShapePerlin = ShapeNoise.y;
 
     float3 DetailNoisePos = ShapeNoisePos*8.0;
-    float DetailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2,DetailNoisePos,0).x;
+    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
 
     float CloudMinHeight = 20;//offset inside bounds?
     float height = WorldPos.y - CloudMinHeight;//165-3490
