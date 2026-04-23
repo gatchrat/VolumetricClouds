@@ -145,8 +145,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax) {
         float nextTransmittance = transmittance*exp(-sigE*stepSize);
         float _dTr = transmittance-nextTransmittance;
 
-        sunInScatterN0 += sigS_over_sigE*powder*shadowTransmittance*_dTr;
-        sunInScatterN1 += 0.5*sigS_over_sigE*powder*sqrt(shadowTransmittance)*_dTr;
+        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.35)*shadowTransmittance*_dTr;
+        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.35)*sqrt(shadowTransmittance)*_dTr;
         ambientInScatterN += sigS_over_sigE *powder*_dTr;
         distSum +=t*_dTr;
 
@@ -168,7 +168,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax) {
     float3 avgCloudPos = viewPos +avgCloudDist*viewDir;
 
     float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
-    float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0); 
+    float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0)/1.2; 
     float3 ambientIrradiance       = float3(0.4, 0.5,  0.7);  // sky blue
 
     float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance;
@@ -181,7 +181,7 @@ float2 IntersectCloudLayer(Ray ray) {
     bool insideLayer = ray.origin.y >= CLOUD_BOTTOM && ray.origin.y <= CLOUD_TOP;
 
     if (insideLayer) {
-        if (abs(Steigung) < 0.0001) return float2(0, 3000);
+        if (abs(Steigung) < 0.01) return float2(0, 3000);
         // Already inside: start at 0, exit is whichever boundary we hit first
         float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
         float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
@@ -189,7 +189,7 @@ float2 IntersectCloudLayer(Ray ray) {
         if (tExit < 0) return float2(-1, -1); // moving parallel-ish or away
         return float2(0, tExit);
     } else {
-        if (abs(Steigung) < 0.0001) return float2(-1, -1);
+        if (abs(Steigung) < 0.01) return float2(-1, -1);
         float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
         float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
         // Outside: must enter and exit
