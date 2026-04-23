@@ -191,7 +191,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 var cmd = ctx.cmd;
                 var cam = d.camera;
 
-                // ── 1. RAYMARCH at quarter resolution ──────────────────────────
+                ////////////////////////////RAYMARCHING//////////////////////////////////
                 cmd.SetComputeMatrixParam(d.shader, "_CameraToWorld", cam.cameraToWorldMatrix);
                 cmd.SetComputeMatrixParam(d.shader, "_CameraInverseProjection", cam.projectionMatrix.inverse);
                 cmd.SetComputeIntParam(d.shader, "_FrameIndex", Time.frameCount);
@@ -212,7 +212,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 int qGroupsY = Mathf.CeilToInt(d.quarterHeight / 8f);
                 cmd.DispatchCompute(d.shader, d.raymarchKernel, qGroupsX, qGroupsY, 1);
 
-                // ── 2. UPSCALE quarter → full resolution ───────────────────────
+                //////////////////////////////////////TAA/////////////////////////////////////////////
                 cmd.SetComputeVectorParam(d.upscaleShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudBuffer", d.quarterCloudBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudBuffer", d.fullCloudBuffer);
@@ -223,7 +223,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
                 cmd.DispatchCompute(d.upscaleShader, d.upscaleKernel, groupsX, groupsY, 1);
 
-                // ── 3. MERGE clouds over scene color ───────────────────────────
+                /////////////////////////////////////MERGE//////////////////////////////////////////////
                 cmd.SetComputeVectorParam(d.mergeShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudBuffer", d.fullCloudBuffer);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_SrcTex", d.src);
