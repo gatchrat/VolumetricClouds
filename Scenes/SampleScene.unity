@@ -398,7 +398,7 @@ MonoBehaviour:
   WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
   DensityThreshold: 0.7
   StepCount: 100
-  DensityMultiplier: 200
+  DensityMultiplier: 100
   TransmittanceFalloff: 0.3
   PowderEffect: 99.6
   BeersEffect: 100
