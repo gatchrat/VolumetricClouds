@@ -17,155 +17,68 @@ int CurLayer;
 int Mode;
 float4 fmbWeights;
 
-static const int3 offsets3D[27] = {
-    int3(0, 0, 0),
-    int3(1, 0, 0),
-    int3(-1, 0, 0),
-    int3(0, 1, 0),
-    int3(1, 1, 0),
-    int3(-1, 1, 0),
-    int3(0, -1, 0),
-    int3(1, -1, 0),
-    int3(-1, -1, 0),
-    int3(0, 0, 1),
-    int3(1, 0, 1),
-    int3(-1, 0, 1),
-    int3(0, 1, 1),
-    int3(1, 1, 1),
-    int3(-1, 1, 1),
-    int3(0, -1, 1),
-    int3(1, -1, 1),
-    int3(-1, -1, 1),
-    int3(0, 0, -1),
-    int3(1, 0, -1),
-    int3(-1, 0, -1),
-    int3(0, 1, -1),
-    int3(1, 1, -1),
-    int3(-1, 1, -1),
-    int3(0, -1, -1),
-    int3(1, -1, -1),
-    int3(-1, -1, -1),
-};
-
-float GetDistanceBetween(float3 Pos,float3 Pos2) {
-    float3 Direction = Pos2-Pos;
-    float sqrDstToNeighbour = dot(Direction,Direction);
-    float curDistance = sqrt(sqrDstToNeighbour);
-    return curDistance;
+float Hash(uint n)
+{
+    n = (n ^ 61u) ^ (n >> 16u);
+    n *= 9u;
+    n ^= n >> 4u;
+    n *= 0x27d4eb2du;
+    n ^= n >> 15u;
+    return float(n) * (1.0 / 4294967296.0); // divide by 2^32
 }
-
-float3 GetCurPoint(int Index) {
-    if(CurLayer == 0) {
-            return ShapeWorleyPointsA[Index];
-    }
-    if(CurLayer == 1) {
-            return ShapeWorleyPointsR[Index];
-    }
-    if(CurLayer == 2) {
-            return ShapeWorleyPointsG[Index];
-    }
-    else {
-        return ShapeWorleyPointsB[Index];
-    }
-}
-
-float GetDistanceToClosestPoint(float3 Pos, uint3 Cell) {
-    Cell += uint3(1,1,1);//One Layer of cells is outside, so we need to move one in
-    //we need values between 0 and 1 -> find max distance and scale by that
-    //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
-    float CellSize = (float)TextureSize/CellsPerRow+2; //Might be off by one pixel depending on the cell, should be fine
-    float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
-    float distance =  maxDistance;
-    //Closest Point is in either this or a neighbor cell
-    for(int i = 0; i<27; i++) {
-        int3 curCell = Cell+offsets3D[i];
-        //Ensure we dont check out of bounds
-            int CurIndex = curCell.z + (CellsPerRow+2)*curCell.y+(CellsPerRow+2)*(CellsPerRow+2)*curCell.x;
-            distance= min(GetDistanceBetween(Pos, GetCurPoint(CurIndex)),distance);
-    }
-    distance = distance/maxDistance;
-    distance = distance*distance;
-    return 1-distance;
-}
-
-float GetDistanceToClosestPointDetail(float3 Pos, uint3 Cell) {
-     Cell += uint3(1,1,1);//One Layer of cells is outside, so we need to move one in
-    //we need values between 0 and 1 -> find max distance and scale by that
-    //Max distance is distance between 0,0,0 and opposite corner at cellsize,...
-    float CellSize = (float)TextureSize/CellsPerRow+2; //Might be off by one pixel depending on the cell, should be fine
-    float maxDistance = sqrt(dot(float3(CellSize,CellSize,CellSize),float3(CellSize,CellSize,CellSize)));
-    float distance =  maxDistance;
-    //Closest Point is in either this or a neighbor cell
-    for(int i = 0; i<27; i++) {
-        int3 curCell = Cell+offsets3D[i];
-        //Ensure we dont check out of bounds
-            int CurIndex = curCell.z + (CellsPerRow+2)*curCell.y+(CellsPerRow+2)*(CellsPerRow+2)*curCell.x;
-            distance= min(GetDistanceBetween(Pos, DetailWorleyPoints[CurIndex]),distance);
-    }
-    distance = distance/maxDistance;
-    return distance; //Invert so point is white instead of black
-}
-
-void GetCellBounds(uint cellIndex, float cellSize, uint textureSize,
-    out float lower, out float size) {
-    lower = floor(cellIndex * cellSize);
-    float upper = min(ceil((cellIndex + 1) * cellSize), textureSize); 
-    size  = upper - lower;
+float3 hash(int3 p) {
+    uint seed = uint(p.x) * 1664525u + uint(p.y) * 1013904223u + uint(p.z) * 22695477u;
+    return float3(Hash(seed), Hash(seed ^ 0xA3C59AC3u), Hash(seed ^ 0x59A3C59Au));
 }
 
 [numthreads(8,8,8)]
 void GenerateWorley(uint3 id : SV_DispatchThreadID) {
-    if (any(id >= CellsPerRow)) return;
+    if (any(id >= TextureSize)) return;
+    float3 cellPos =  float3(id)/float(TextureSize)*float(CellsPerRow);
+    int3 CellId = int3(cellPos);
+    float3 w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    float minDistSq = 10000.0;
 
-    float CellSize = (float)TextureSize / CellsPerRow;
-
-    float lowerX, sizeX, lowerY, sizeY, lowerZ, sizeZ;
-    GetCellBounds(id.x, CellSize, TextureSize, lowerX, sizeX);
-    GetCellBounds(id.y, CellSize, TextureSize, lowerY, sizeY);
-    GetCellBounds(id.z, CellSize, TextureSize, lowerZ, sizeZ);
-
-    for (int x = 0; x < (int)sizeX; x++)
-    for (int y = 0; y < (int)sizeY; y++)
-    for (int z = 0; z < (int)sizeZ; z++) {
-        float3 Pos = float3(lowerX + x, lowerY + y, lowerZ + z);
-        float4 val;
-            val =  ShapeRenderTexture.Load(int3(Pos));
-
-        float dist = GetDistanceToClosestPoint(Pos, id);
-
-         if (CurLayer == 0) val.x = dist;
-        else if (CurLayer == 1) val.y = dist;
-        else if (CurLayer == 2) val.z = dist;
-        else if (CurLayer == 3) val.w = dist;
-            ShapeRenderTexture[Pos] = val;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+        for (int z = -1; z <=1; ++z) {
+            int3 vertexId = (CellId + int3(x,y,z)) % CellsPerRow;
+            float3 pointFrac = hash(vertexId);
+            float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+            minDistSq = min(minDistSq,dot(toPoint,toPoint));
     }
+    float4 val =ShapeRenderTexture.Load(id);
+    if (CurLayer == 0) val.x = 1-minDistSq;
+        else if (CurLayer == 1) val.y = 1-minDistSq;
+        else if (CurLayer == 2) val.z = 1-minDistSq;
+        else if (CurLayer == 3) val.w = 1-minDistSq;
+    ShapeRenderTexture[id] =val;
 }
 
 [numthreads(8,8,8)]
 void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
-    if (any(id >= CellsPerRow)) return;
+    if (any(id >= TextureSize)) return;
+    float3 cellPos =  float3(id)/float(TextureSize)*float(CellsPerRow);
+    int3 CellId = int3(cellPos);
+    float3 w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    float minDistSq = 10000.0;
 
-    float CellSize = (float)TextureSize / CellsPerRow;
-
-    float lowerX, sizeX, lowerY, sizeY, lowerZ, sizeZ;
-    GetCellBounds(id.x, CellSize, TextureSize, lowerX, sizeX);
-    GetCellBounds(id.y, CellSize, TextureSize, lowerY, sizeY);
-    GetCellBounds(id.z, CellSize, TextureSize, lowerZ, sizeZ);
-
-    for (int x = 0; x < (int)sizeX; x++)
-    for (int y = 0; y < (int)sizeY; y++)
-    for (int z = 0; z < (int)sizeZ; z++) {
-        float3 Pos = float3(lowerX + x, lowerY + y, lowerZ + z);
-        float4 val = DetailRenderTexture.Load(int3(Pos));
-
-        float dist = GetDistanceToClosestPointDetail(Pos, id);
-
-        if (CurLayer == 0) val.x = dist;
-        else if (CurLayer == 1) val.y = dist;
-        else if (CurLayer == 2) val.z = dist;
-        else if (CurLayer == 3) val.w = dist;
-            DetailRenderTexture[Pos] = val;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+        for (int z = -1; z <=1; ++z) {
+            int3 vertexId = (CellId + int3(x,y,z)) % CellsPerRow;
+            float3 pointFrac = hash(vertexId);
+            float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+            minDistSq = min(minDistSq,dot(toPoint,toPoint));
     }
+    float4 val =DetailRenderTexture.Load(id);
+    if (CurLayer == 0) val.x = 1-minDistSq;
+        else if (CurLayer == 1) val.y = 1-minDistSq;
+        else if (CurLayer == 2) val.z = 1-minDistSq;
+        else if (CurLayer == 3) val.w = 1-minDistSq;
+    DetailRenderTexture[id] =val;
 }
 
 [numthreads(8,8,8)]
