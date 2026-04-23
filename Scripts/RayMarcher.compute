@@ -2,6 +2,8 @@
 
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _CloudBuffer;
+Texture2D<float>    _DepthTex;        // scene depth - READ only
+RWTexture2D<float>  _CloudDepthTex;
 Texture3D<float4> ShapeTexture;
 Texture3D<float4> DetailTexture;
 Texture2D<float4> BlueNoise;
@@ -13,6 +15,7 @@ float3 SunPostion;
 float3 _BoundsMin;
 float3 _BoundsMax;
 float2 _Resolution;
+float2 _FullResolution;
 int _FrameIndex;
 
 cbuffer _CloudSettings {
@@ -106,7 +109,7 @@ float HGPhase (float cos_angle , float inG) {
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
-float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax) {
+float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth) {
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunPostion);
     float stepSize = 50;
@@ -163,10 +166,12 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax) {
     ambientInScatterN *= 1.0/(4.0*3.1415);
 
     float avgCloudDist = distSum /(1.0-transmittance);
+    depth = avgCloudDist;
     float3 avgCloudPos = viewPos +avgCloudDist*viewDir;
 
     float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
     float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0)/1.2; 
+    //float3 sunIrradianceOuterSpace = float3(8.0, 2, 0); 
     float3 ambientIrradiance       = float3(0.4, 0.5,  0.7);  // sky blue
 
     float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance;
@@ -200,10 +205,14 @@ float2 IntersectCloudLayer(Ray ray) {
 [numthreads(8, 8, 1)]
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
-    if(_FrameIndex % 2 == (id.x+id.y) % 2) return; //Render each pixel every other frame
+    if(_DepthTex[id.xy*4]>0) {
+        //Only render when there is nothing in the way
+        _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
+        _CloudDepthTex[id.xy] = 0;
+        return;
+    }
 
-    float4 sceneColor = _SrcTex[id.xy];
-
+    float4 sceneColor = _SrcTex[id.xy]; // fix pixel coords to full scale
     Ray ray = GenerateRay(id.xy);
     float2 intersection = IntersectCloudLayer(ray);
 
@@ -211,9 +220,14 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         _CloudBuffer[id.xy] = sceneColor;
         return;
     }
-    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y);
-    sceneColor.w = 1-result.w;
-    result = result*result.w+sceneColor*sceneColor.w;
-    result.w = 1;
-    _CloudBuffer[id.xy] = result;
+    float depth = 0;
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
+    if(result.w > 0) {
+        sceneColor.w = 1-result.w;
+        float4 finalColor = result*result.w+sceneColor*sceneColor.w;
+        finalColor.w = 1;
+        _CloudBuffer[id.xy] = finalColor;
+    }else {
+        _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
+    }
 }
