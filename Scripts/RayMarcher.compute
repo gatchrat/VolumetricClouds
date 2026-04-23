@@ -64,7 +64,7 @@ float RemapRange(float val,float oldMin, float oldMax,float newMin, float newMax
 static  float CLOUD_TOP = 3500.0;
 static  float  CLOUD_BOTTOM = 175.0;
 float GetCloudDensity(float3 WorldPos) {
-    float cloudCoverage = 0.8; //Implement 2.3.4 above adjusted cloud coverage
+    float cloudCoverage = 0.6; //Implement 2.3.4 above adjusted cloud coverage
     float cloudHeightScale = 1;
 
     float ShapeTiling = 0.0001;
@@ -74,7 +74,7 @@ float GetCloudDensity(float3 WorldPos) {
     float ShapeWorley = ShapeNoise.x;
     float ShapePerlin = ShapeNoise.y;
 
-    float3 DetailNoisePos = ShapeNoisePos*12.0;
+    float3 DetailNoisePos = ShapeNoisePos*8.0;
     float DetailNoise = DetailTexture.SampleLevel(linearRepeatSampler_2,DetailNoisePos,0).x;
 
     float CloudMinHeight = 20;//offset inside bounds?
@@ -168,7 +168,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax) {
     float3 avgCloudPos = viewPos +avgCloudDist*viewDir;
 
     float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
-    float3 sunIrradianceOuterSpace = float3(1.0, 1.0,  1.0);
+    float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0); 
     float3 ambientIrradiance       = float3(0.4, 0.5,  0.7);  // sky blue
 
     float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance;
