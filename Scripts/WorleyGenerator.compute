@@ -3,12 +3,6 @@
 #pragma kernel CombineWorley
 #pragma kernel CombineWorleyDetail
 
-RWStructuredBuffer<float3> ShapeWorleyPointsA;
-RWStructuredBuffer<float3> ShapeWorleyPointsR;
-RWStructuredBuffer<float3> ShapeWorleyPointsG;
-RWStructuredBuffer<float3> ShapeWorleyPointsB;
-RWStructuredBuffer<float3> DetailWorleyPoints;
-RWStructuredBuffer<float> PerlinNoise;
 RWTexture3D<float4> ShapeRenderTexture;
 RWTexture3D<float4> DetailRenderTexture;
 int TextureSize;
@@ -80,14 +74,41 @@ void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
         else if (CurLayer == 3) val.w = 1-minDistSq;
     DetailRenderTexture[id] =val;
 }
-
+float PerlinNoise(float3 Pos){
+    float3 uvw = Pos/float(TextureSize);
+    float numCells = 4;
+    float3 CellPos = uvw*numCells;
+    int3 cellId = int3(CellPos);
+    float3 w = frac(CellPos);
+     cellId += int3(443189,79301,41681);
+     float3 u = w*w*w*(w*(w*6.0-15.0)+10.0);
+     float Noise = 0.0;
+     float3 weights = float3(0.0,0.0,0.0);
+     weights.z  = 1.0-u.z;
+    for(int z = 0; z<=1; ++z){
+        weights.y = 1.0-u.y;
+        for(int y = 0; y<=1; ++y){
+            weights.x = 1.0-u.x;
+            for(int x = 0; x<=1; ++x){
+                int3 vertexId =(cellId+int3(x,y,z))%numCells;
+                float3 gradVec = hash(vertexId)*2.0-1.0;
+                float dotProduct = dot(gradVec,w-float3(x,y,z));
+                Noise += weights.x*weights.y*weights.z*dotProduct;
+                weights.x = 1.0-weights.x;
+     }
+     weights.y = 1.0-weights.y;
+     }
+     weights.z = 1.0-weights.z;
+     }
+     return Noise;
+}
 [numthreads(8,8,8)]
 void CombineWorley(uint3 id : SV_DispatchThreadID) {
     if (any(id >= (uint)TextureSize)) return;
     float4 val = ShapeRenderTexture.Load(id);
     float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.w*fmbWeights.z; //Leave 20 for Perlin
-    float Perlin =lerp(PerlinNoise[id.z+id.y*TextureSize+id.x*TextureSize*TextureSize]+0.5,1,0.1*(2*val.z-1));
-    ShapeRenderTexture[id] = float4(combined, Perlin, 0, 1);
+    float Perlin =lerp(0.5*PerlinNoise(id)+0.5,1,0.1*(2*val.z-1));
+    ShapeRenderTexture[id] = float4(1-combined, Perlin, 0, 1);
 }
 
 [numthreads(8,8,8)]
@@ -96,6 +117,6 @@ void CombineWorleyDetail(uint3 id : SV_DispatchThreadID) {
     float4 val = DetailRenderTexture.Load(id);
     float combined = val.x*0.625 + val.y*0.25 + val.z*0.125 ;
     
-    DetailRenderTexture[id] = float4(combined, 0, 0, 1);
+    DetailRenderTexture[id] = float4(1-combined, 0, 0, 1);
 }
 
