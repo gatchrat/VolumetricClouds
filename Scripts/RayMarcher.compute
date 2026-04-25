@@ -179,7 +179,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     ambientInScatterN *= 1.0/(4.0*3.1415);
 
     float avgCloudDist = distSum /(1.0-transmittance);
-    depth= (viewPos +avgCloudDist*viewDir).y; 
+    depth= avgCloudDist; 
 
     float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
     float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0)/1.2; 
@@ -196,12 +196,11 @@ float2 IntersectCloudLayer(Ray ray) {
     bool insideLayer = ray.origin.y >= CLOUD_BOTTOM && ray.origin.y <= CLOUD_TOP;
 
     if (insideLayer) {
-        if (abs(Steigung) < 0.01) return float2(0, 3000);
+        if (abs(Steigung) < 0.01) return float2(0, 30000);
         // Already inside: start at 0, exit is whichever boundary we hit first
         float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
         float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
         float tExit = Steigung > 0 ? tTop : tBottom;
-        if (tExit < 0) return float2(-1, -1); //funny blue line on the middle of my nice clouds
         return float2(0, tExit);
     } else {
         if (abs(Steigung) < 0.01) return float2(-1, -1);
@@ -254,7 +253,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         sceneColor.w = 1-result.w;
         float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
         finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
-        _CloudBuffer[id.xy] = finalColor;
+        _CloudBuffer[id.xy] = result;
         _CloudDepthTex[id.xy] = depth;
     }else {
         _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
