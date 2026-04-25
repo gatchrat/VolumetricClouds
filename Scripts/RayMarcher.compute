@@ -231,12 +231,6 @@ uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
-    if(_DepthTex[FullResPixel]>0) {
-        //Only render when there is nothing in the way
-        _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
-        _CloudDepthTex[id.xy] = 0;
-        return;
-    }
 
     float4 sceneColor = _SrcTex[FullResPixel];
     Ray ray = GenerateRay(FullResPixel);
@@ -250,7 +244,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float depth = 0;
     float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
     if(result.w > 0) {
-        if(result.w < 0.07) result.w = result.w * result.w;
+        //  if(result.w < 0.07) result.w = result.w * result.w;
         sceneColor.w = 1-result.w;
         float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
         finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha

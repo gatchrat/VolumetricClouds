@@ -3,13 +3,14 @@
 Texture2D<float4>   _SrcTex;
 RWTexture2D<float4> _OutputTex;
 RWTexture2D<float4> _CloudBuffer;
+Texture2D<float>    _DepthTex;             // full-res scene depth
 float2 _Resolution;
 
 [numthreads(8, 8, 1)]
 void Merge(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     _OutputTex[id.xy] = _SrcTex[id.xy];
-    if(any(_CloudBuffer[id.xy]) > 0) {
+    if(any(_CloudBuffer[id.xy]) > 0 && _DepthTex[id.xy]== 0) {
         _OutputTex[id.xy]  = _CloudBuffer[id.xy]*_CloudBuffer[id.xy].w+_SrcTex[id.xy]*(1-_CloudBuffer[id.xy].w);
     }
 }

@@ -263,6 +263,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 /////////////////////////////////////MERGE//////////////////////////////////////////////
                 cmd.SetComputeVectorParam(d.mergeShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudBuffer", d.fullCloudBuffer);
+                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_OutputTex", d.dst);
 
