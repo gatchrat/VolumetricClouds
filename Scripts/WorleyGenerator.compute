@@ -5,10 +5,9 @@
 
 RWTexture3D<float4> ShapeRenderTexture;
 RWTexture3D<float4> DetailRenderTexture;
-int TextureSize;
-int CellsPerRow;
-int CurLayer;
-int Mode;
+uint TextureSize;
+uint CellsPerRow;
+uint CurLayer;
 float4 fmbWeights;
 
 float Hash(uint n)

@@ -82,7 +82,7 @@ float GetCloudDensity(float3 WorldPos) {
     float ShapeWorley = ShapeNoise.x;
     float ShapePerlin = ShapeNoise.y;
 
-    float3 DetailNoisePos = ShapeNoisePos*8.0;
+    float3 DetailNoisePos = ShapeNoisePos*10.0;
     float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
 
     //Doom height scaling
@@ -103,7 +103,8 @@ float GetCloudDensity(float3 WorldPos) {
     Density = RemapRange(Density, 1.0 - adjCloudCoverage, 1.0, 0.0, 1.0);
     Density *= heightFade;
     Density *=cloudCoverage;
-    Density = RemapRange(Density,0.4*DetailNoise*noiseScale,1.0,0.0,1.0);
+    float sharpDetail = pow(DetailNoise, 2.0); // punch up contrast
+    Density = RemapRange(Density, 0.5 * sharpDetail * noiseScale, 1.0, 0.0, 1.0);
     return Density;
 }
 //SChneider GPU7
@@ -119,7 +120,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunPostion);
     float stepSize = 50;
-    float ShadowStepSize = 200;
+    float ShadowStepSize = 80;
     float betaE =  0.05;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
     float sigS_over_sigE = 1.0; //general energy multiplier
     float VdotL = dot(viewDir,sunDir);
@@ -133,7 +134,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float distSum = 0.0;
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
-        float3 samplePos = viewPos +t*viewDir; //TODO Jitter based on blue noise
+        float3 samplePos = viewPos +t*viewDir;
         float density = GetCloudDensity(samplePos);
         float shadowOpticalDepth = 0.0; 
         if(density > 0) {
@@ -155,8 +156,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         float _dTr = transmittance-nextTransmittance;
 
         //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.35)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
-        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.35)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.6)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
+        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.6)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
 
         ambientInScatterN += sigS_over_sigE *powder*_dTr;
         distSum +=t*_dTr;
@@ -181,14 +182,14 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float avgCloudDist = distSum /(1.0-transmittance);
     depth= avgCloudDist; 
 
-    float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
-    float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0)/1.2; 
-    //float3 sunIrradianceOuterSpace = float3(8.0, 2, 0); 
-    float3 ambientIrradiance       = float3(0.4, 0.5,  0.7);  // sky blue Ambient color
+    float3 sunIrradianceOuterSpace = float3(1.0, 0.8, 0.65); 
+    //sunIrradianceOuterSpace = float3(1.0, 0, 0); 
+    float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
 
-    float3 sunIrradiance = sunIrradianceOuterSpace *sunAtmTransmittance; //TODO if i dont implement the fancy atmosphere stuff just replace by single color value
+    float3 sunIrradiance = sunIrradianceOuterSpace; //TODO if i dont implement the fancy atmosphere stuff just replace by single color value
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
-    return float4(inScatter,1-transmittance);
+    //inScatter = inScatter * (1.0 + inScatter * 0.8);
+    return float4(inScatter*5,1-transmittance);
 }
 float2 IntersectCloudLayer(Ray ray) {
     float Steigung = ray.direction.y; // We only need steigung to check if and when we will hit cloud layer from our pos
