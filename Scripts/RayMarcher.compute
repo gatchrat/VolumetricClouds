@@ -250,6 +250,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float depth = 0;
     float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
     if(result.w > 0) {
+        if(result.w < 0.07) result.w = result.w * result.w;
         sceneColor.w = 1-result.w;
         float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
         finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
