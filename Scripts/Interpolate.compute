@@ -11,7 +11,7 @@ float4x4 _PrevViewProj;    // P * V for previous frame
 float4x4 _CurrViewProj;
 float2              _Resolution;
 float2              _QuarterResolution;
-int                 _FrameIndex;
+uint                 _FrameIndex;
 float4              _ZBufferParams;
 SamplerState        sampler_linear_clamp;
 SamplerState        sampler_bilinear_clamp;
