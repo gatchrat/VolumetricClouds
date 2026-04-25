@@ -16,7 +16,7 @@ float3 _BoundsMin;
 float3 _BoundsMax;
 float2 _Resolution;
 float2 _FullResolution;
-int _FrameIndex;
+uint _FrameIndex;
 
 cbuffer _CloudSettings {
     float3 Offset;
@@ -49,7 +49,7 @@ float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, flo
 
 Ray GenerateRay(uint2 pixelCoord) {
     //Convert Pixel to World Pos and Direction
-    float2 uv = ((float2)pixelCoord / _Resolution) * 2.0 - 1.0;
+    float2 uv = ((float2)pixelCoord / _FullResolution) * 2.0 - 1.0;
     float4 viewDir = mul(_CameraInverseProjection, float4(uv, 0.0, 1.0));
     viewDir /= viewDir.w;
     float3 worldDir = mul(_CameraToWorld, float4(viewDir.xyz, 0.0)).xyz;
@@ -108,7 +108,7 @@ float GetCloudDensity(float3 WorldPos) {
 }
 //SChneider GPU7
 float HGPhase (float cos_angle , float inG) {
-    return ((1.0 - inG * inG) / pow ((1.0 + inG * inG -2.0 * inG * cos_angle) , 3.0 / 2.0)) / 4.0 * 3.1415;
+    return ((1.0 - inG * inG) / pow (abs(1.0 + inG * inG -2.0 * inG * cos_angle) , 3.0 / 2.0)) / 4.0 * 3.1415;
 }
 //Doom
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
@@ -179,8 +179,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     ambientInScatterN *= 1.0/(4.0*3.1415);
 
     float avgCloudDist = distSum /(1.0-transmittance);
-    depth = avgCloudDist; //Possible depth based smoothing and used to not smooth two different clouds together
-    float3 avgCloudPos = viewPos +avgCloudDist*viewDir; //Unused for now
+    depth= (viewPos +avgCloudDist*viewDir).y; 
 
     float3 sunAtmTransmittance     = float3(1.0, 0.95, 0.9);  // slight warm tint
     float3 sunIrradianceOuterSpace = float3(8.0, 7.5, 7.0)/1.2; 
@@ -214,22 +213,39 @@ float2 IntersectCloudLayer(Ray ray) {
         return float2(tEnter, tExit);
     }
 }
+uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
+    //Scale up by 4 and decide current pos in 4x4 square to achieve 16 pixel temporal
+    //Scale 4x4 up to 16x16
+    //(0,0) ->(0-3,0-3)
+    //(1,0) -> (4-7,0-3)
+    //(2,0) -> (8-11,0-3)
+    //(3,0) -> (12-15,0-3)
+    //Multiply by 4 and add offset
+    //Offset is simply row by row, possibly check board this ?
+
+    QuarterPixel *=4;
+    uint FrameSlot = _FrameIndex % 16;
+    uint2 Offset = uint2(FrameSlot % 4, FrameSlot / 4);
+    return QuarterPixel+Offset;
+}
 [numthreads(8, 8, 1)]
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
-    if(_DepthTex[id.xy*4]>0) {
+    uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
+    if(_DepthTex[FullResPixel]>0) {
         //Only render when there is nothing in the way
         _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
         _CloudDepthTex[id.xy] = 0;
         return;
     }
 
-    float4 sceneColor = _SrcTex[id.xy]; // fix pixel coords to full scale. Causes floor appearing in the scy
-    Ray ray = GenerateRay(id.xy);
+    float4 sceneColor = _SrcTex[FullResPixel];
+    Ray ray = GenerateRay(FullResPixel);
     float2 intersection = IntersectCloudLayer(ray);
 
     if (intersection.x < 0 || intersection.y < intersection.x) {
-        _CloudBuffer[id.xy] = sceneColor;
+        _CloudBuffer[id.xy] =float4(0, 0, 0, 0);
+        _CloudDepthTex[id.xy] = 0;
         return;
     }
     float depth = 0;
@@ -239,7 +255,9 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
         finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
         _CloudBuffer[id.xy] = finalColor;
+        _CloudDepthTex[id.xy] = depth;
     }else {
         _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
+        _CloudDepthTex[id.xy] = 0;
     }
 }
