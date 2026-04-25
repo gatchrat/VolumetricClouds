@@ -14,6 +14,7 @@ float2              _QuarterResolution;
 int                 _FrameIndex;
 float4              _ZBufferParams;
 SamplerState        sampler_linear_clamp;
+SamplerState        sampler_bilinear_clamp;
 SamplerState        sampler_point_clamp;
 
 float LinearEyeDepth(float d) {
@@ -21,14 +22,13 @@ float LinearEyeDepth(float d) {
 }
 
 float3 ReconstructWorldPos(float2 uv, float deviceDepth) {
-    // NDC position - no Y flip needed, GPU matrices handle it
     float4 ndc = float4(uv * 2.0 - 1.0, deviceDepth, 1.0);
     float4 worldPos = mul(_CurrInvViewProj, ndc);
     return worldPos.xyz / worldPos.w;
 }
 float3 GetRayDir(float2 uv) {
-    float2 ndcXY    = float2(uv.x, 1.0 - uv.y) * 2.0 - 1.0; // flip Y before inverse
-    float4 ndc      = float4(ndcXY, 0.0, 1.0);               // Z=0 = far in reversed-Z
+    float2 ndcXY    = float2(uv.x, 1.0 - uv.y) * 2.0 - 1.0; 
+    float4 ndc      = float4(ndcXY, 0.0, 1.0);               
     float4 worldFar = mul(_CurrInvViewProj, ndc);
     return normalize(worldFar.xyz / worldFar.w - _CameraPos);
 }
@@ -38,23 +38,22 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
 
     float2 fullUV       = (float2(id.xy) + 0.5) / _Resolution;
-    uint2  quarterCoord = id.xy / 4;
+    float2 jitter = float2(_FrameIndex % 4, (_FrameIndex / 4) % 4);
+    uint2  quarterCoord = (id.xy-jitter) / 4;
     float2 quarterUV    = (float2(quarterCoord) + 0.5) / _QuarterResolution;
 
-    float4 newSample       = _QuarterCloudBuffer[quarterCoord];
+    float4 newSample      =  _QuarterCloudBuffer.SampleLevel(sampler_bilinear_clamp, quarterUV, 0);
     float  cloudWorldDist  = _CloudDepthTex.SampleLevel(sampler_point_clamp, quarterUV, 0).r;
 
-    // No cloud depth means no cloud here — just output transparent
     if (cloudWorldDist < 0.1) {
         _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
         return;
     }
 
     // Reconstruct world position directly from ray + distance
-    float cloudY = _CloudDepthTex.SampleLevel(sampler_point_clamp, quarterUV, 0).r;
+    float dist = _CloudDepthTex.SampleLevel(sampler_point_clamp, quarterUV, 0).r;
     float3 rayDir = GetRayDir(fullUV);
-    float t = (cloudY - _CameraPos.y) / rayDir.y; // ray-plane intersection
-    float3 worldPos = _CameraPos + t * rayDir;
+    float3 worldPos = _CameraPos + rayDir * dist;
 
     float4 prevClip = mul(_PrevViewProj, float4(worldPos, 1.0));
     prevClip /= prevClip.w;
@@ -78,12 +77,23 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     bool  isFresh   = (pixelSlot == (uint)_FrameIndex % 16);
 
     float4 history = _HistoryBuffer.SampleLevel(sampler_linear_clamp, prevUV, 0);
+    float4 minN = newSample - 0.2;
+    float4 maxN = newSample + 0.2;
+
+    history = clamp(history, minN, maxN);
+
+    if (history.w == 0) {
+        history = newSample;
+    }
 
     if (isFresh) {
         float motionMag = length(prevUV - fullUV);
         float alpha     = lerp(1.0 / 16.0, 0.5, saturate(motionMag * 20.0));
         _CloudBuffer[id.xy] = lerp(history, newSample, alpha);
     } else {
-        _CloudBuffer[id.xy] = history;
+        float motionMag = length(prevUV - fullUV);
+        float historyWeight = saturate(1.0 - motionMag * 50.0);
+        _CloudBuffer[id.xy] = lerp(newSample, history, historyWeight);
+        // _CloudBuffer[id.xy] = history;
     }
 }
