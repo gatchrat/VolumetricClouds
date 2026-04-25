@@ -116,11 +116,13 @@ float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
 //Mostly Doom based
-float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth) {
+float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunPostion);
     float stepSize = 50;
     float ShadowStepSize = 80;
+    float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
+    viewPos +=viewDir*rayOffset;
     float betaE =  0.05;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
     float sigS_over_sigE = 1.0; //general energy multiplier
     float VdotL = dot(viewDir,sunDir);
@@ -243,7 +245,9 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         return;
     }
     float depth = 0;
-    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
+
+    float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise);
     if(result.w > 0) {
         //  if(result.w < 0.07) result.w = result.w * result.w;
         sceneColor.w = 1-result.w;
