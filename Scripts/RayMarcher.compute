@@ -68,12 +68,51 @@ float RemapRange(float val,float oldMin, float oldMax,float newMin, float newMax
 static  float CLOUD_TOP = 3500.0;
 static  float  CLOUD_BOTTOM = 175.0;
 
+static const float SHELL_INNER     = 6900.0;
+static const float SHELL_OUTER     = 10000.0;
+static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;  // 100
+
+float2 RaySphereIntersect(float3 rayOrigin, float3 rayDir, float radius) {
+    float b    = dot(rayOrigin, rayDir);
+    float c    = dot(rayOrigin, rayOrigin) - radius * radius;
+    float disc = b * b - c;
+    if (disc < 0.0) return float2(-1, -1);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+float2 IntersectCloudShell(Ray ray) {
+    // Camera-relative origin is always (0,0,0)
+    float2 inner = RaySphereIntersect(ray.origin, ray.direction, SHELL_INNER);
+    float2 outer = RaySphereIntersect(ray.origin, ray.direction, SHELL_OUTER);
+
+    float tMin = max(inner.y, 0.0);
+    float tMax = max(outer.y, 0.0);
+    if (tMax <= 0.0 || tMax <= tMin) return float2(-1, -1);
+    return float2(tMin, tMax);
+}
+
+//Check if in shell
+bool isInShell(float3 Worldpos) {
+    float dist = length(Worldpos);
+    if(dist>= SHELL_INNER && dist <= SHELL_OUTER) {
+        if(Worldpos.y > 0) {
+            return true;
+        }
+    }
+    return false;
+}
 float GetCloudDensity(float3 WorldPos) {
+    if(!isInShell(WorldPos)) {
+        return 0;
+    }
     float cloudHeightScale = 1;
     float cloudCoverage = 0.6; //TODO Coverage map. Ideally paintable ingame
     float minAdjCloudCoverage = saturate(0.0127 / (cloudHeightScale + 0.153));
     float maxAdjCloudCoverage = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
     float adjCloudCoverage = lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
+    float Adjusted_Bottom = CLOUD_BOTTOM;
+    float Adjusted_Top = CLOUD_TOP;
 
     float ShapeTiling = 0.0001;
     float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
@@ -88,12 +127,14 @@ float GetCloudDensity(float3 WorldPos) {
     //Doom height scaling
     float CloudMinHeight = 20;
     float height = WorldPos.y - CloudMinHeight;
-    float topHeight = RemapRange(cloudHeightScale,0.0,1.0,0.7*CLOUD_BOTTOM,CLOUD_TOP); //always Cloud_top since cloudHeightScale = 1 
-    topHeight = CLOUD_TOP;
-    float bottomHeight = ShapeWorley*CLOUD_BOTTOM;
+    float heightInShell = saturate((length(WorldPos) - SHELL_INNER) / SHELL_THICKNESS);
+    height = heightInShell * CLOUD_TOP;
+    float topHeight = RemapRange(cloudHeightScale,0.0,1.0,0.7*Adjusted_Bottom,Adjusted_Top); //always Cloud_top since cloudHeightScale = 1 
+    topHeight = Adjusted_Top;
+    float bottomHeight = ShapeWorley*Adjusted_Bottom;
     float topHeightFade = RemapRange(height/topHeight,0.8,1.1,1.0,0.0);
-    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+CLOUD_BOTTOM,0.0,1.0);
-    float heightShift = RemapRange(height,CLOUD_BOTTOM,topHeight,1.0,0.0)*bottomHeightFade;
+    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+Adjusted_Bottom,0.0,1.0);
+    float heightShift = RemapRange(height,Adjusted_Bottom,topHeight,1.0,0.0)*bottomHeightFade;
     float noiseShift = 0.05*(1.0-heightShift);
     float thresholdShift  = 0.1*heightShift;
     float heightFade = topHeightFade*bottomHeightFade;
@@ -237,7 +278,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
 
     float4 sceneColor = _SrcTex[FullResPixel];
     Ray ray = GenerateRay(FullResPixel);
-    float2 intersection = IntersectCloudLayer(ray);
+    float2 intersection = IntersectCloudShell(ray);
 
     if (intersection.x < 0 || intersection.y < intersection.x) {
         _CloudBuffer[id.xy] =float4(0, 0, 0, 0);
