@@ -55,6 +55,7 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunDensityImpact = SunDensityImpact;
         cloudSettings.Scale = Scale;
         cloudSettings.DensityThreshold = DensityThreshold;
+        Offset += new Vector3(1, 0, 1) * (Time.deltaTime / 60) / 3;
         cloudSettings.Offset = Offset;
     }
 

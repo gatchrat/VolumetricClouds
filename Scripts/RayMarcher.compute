@@ -116,6 +116,7 @@ float GetCloudDensity(float3 WorldPos) {
 
     float ShapeTiling = 0.0001;
     float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
+    ShapeNoisePos += Offset;
     ShapeNoisePos.y = RemapRange(ShapeNoisePos.y,0,1,0,1);
     float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos, 0).xy;
     float ShapeWorley = ShapeNoise.x;
@@ -268,8 +269,8 @@ uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
 
     QuarterPixel *=4;
     uint FrameSlot = _FrameIndex % 16;
-    uint2 Offset = uint2(FrameSlot % 4, FrameSlot / 4);
-    return QuarterPixel+Offset;
+    uint2 PixelOffset = uint2(FrameSlot % 4, FrameSlot / 4);
+    return QuarterPixel+PixelOffset;
 }
 [numthreads(8, 8, 1)]
 void CloudRaymarch(uint3 id : SV_DispatchThreadID) {

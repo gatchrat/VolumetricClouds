@@ -233,9 +233,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "BlueNoise", d.blueNoiseHandle);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudDepthTex", d.quarterDepthBuffer);
-                cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings",
-                    d.settingsBuffer, 0,
-                    System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
+                cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings", d.settingsBuffer, 0, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
 
                 int qGroupsX = Mathf.CeilToInt(d.quarterWidth / 8f);
                 int qGroupsY = Mathf.CeilToInt(d.quarterHeight / 8f);
