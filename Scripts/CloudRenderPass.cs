@@ -15,7 +15,6 @@ public class CloudRenderPass : ScriptableRenderPass
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
     public Texture2D BlueNoiseTexture;
-    public Vector3 SunPos;
     private CloudSettings _lastSettings;
 
     // Quarter resolution - raymarch target
@@ -175,7 +174,6 @@ public class CloudRenderPass : ScriptableRenderPass
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
-            data.SunPos = SunPos;
             data.settingsBuffer = _settingsBuffer;
             data.fullWidth = fullWidth;
             data.fullHeight = fullHeight;

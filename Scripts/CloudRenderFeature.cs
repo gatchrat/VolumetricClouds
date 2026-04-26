@@ -31,7 +31,6 @@ public class CloudRendererFeature : ScriptableRendererFeature
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;
         _pass.Bounds = CloudBounds;
-        _pass.SunPos = Manager.Sun.position;
         renderer.EnqueuePass(_pass);
     }
     protected override void Dispose(bool disposing)

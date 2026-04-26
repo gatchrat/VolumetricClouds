@@ -11,7 +11,6 @@ SamplerState sampler_Trilinear_repeat;
 
 float4x4 _CameraToWorld;
 float4x4 _CameraInverseProjection;
-float3 SunPostion;
 float3 _BoundsMin;
 float3 _BoundsMax;
 float2 _Resolution;
@@ -29,6 +28,12 @@ cbuffer _CloudSettings {
     float PowderEffect;
     float BeersEffect;
     float SunDensityImpact;
+    float _pad4;
+    float _pad5;
+    float3 SunColor;
+    float SunIntensity;
+    float3 SunDirection;
+    float _pad3;
 };
 
 struct Ray {
@@ -159,7 +164,7 @@ float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
 //Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
     int numShadowSteps = 6;
-    float3 sunDir = normalize(SunPostion);
+    float3 sunDir = normalize(SunDirection);
     float stepSize = 50;
     float ShadowStepSize = 80;
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
@@ -199,8 +204,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         float _dTr = transmittance-nextTransmittance;
 
         //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.6)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
-        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.6)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.35)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
+        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.35)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
 
         ambientInScatterN += sigS_over_sigE *powder*_dTr;
         distSum +=t*_dTr;
@@ -225,11 +230,9 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float avgCloudDist = distSum /(1.0-transmittance);
     depth= avgCloudDist; 
 
-    float3 sunIrradianceOuterSpace = float3(1.0, 0.8, 0.65); 
-    //sunIrradianceOuterSpace = float3(1.0, 0, 0); 
     float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
 
-    float3 sunIrradiance = sunIrradianceOuterSpace; //TODO if i dont implement the fancy atmosphere stuff just replace by single color value
+    float3 sunIrradiance = SunColor*SunIntensity; //TODO if i dont implement the fancy atmosphere stuff just replace by single color value
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
     //inScatter = inScatter * (1.0 + inScatter * 0.8);
     return float4(inScatter*5,1-transmittance);

@@ -1,6 +1,8 @@
 using UnityEngine;
 using System;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Experimental.GlobalIllumination;
+using Unity.Mathematics;
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct CloudSettings
@@ -15,6 +17,13 @@ public struct CloudSettings
     public float PowderEffect;
     public float BeersEffect;
     public float SunDensityImpact;
+    public float _pad4;
+    public float _pad5;
+    public float3 SunColor;
+    public float SunIntensity;
+    public float3 SunDirection;
+    public float _pad3;
+
 }
 
 public class CloudManager : MonoBehaviour
@@ -43,6 +52,7 @@ public class CloudManager : MonoBehaviour
     public Vector3 Offset;
     public Transform CloudsBounds;
     public Transform Sun;
+    private Light SunLight;
 
     public CloudSettings cloudSettings;
 
@@ -57,11 +67,15 @@ public class CloudManager : MonoBehaviour
         cloudSettings.DensityThreshold = DensityThreshold;
         Offset += new Vector3(1, 0, 1) * (Time.deltaTime / 60) / 3;
         cloudSettings.Offset = Offset;
+        cloudSettings.SunDirection = Sun.transform.forward * -1;
+        cloudSettings.SunColor = new Vector3(SunLight.color.r, SunLight.color.g, SunLight.color.b);
+        cloudSettings.SunIntensity = SunLight.intensity;
     }
 
     void Start()
     {
         UnityEngine.Random.InitState(seed);
+        SunLight = Sun.GetComponent<Light>();
 
         if (ShapeRenderTexture != null)
         {
