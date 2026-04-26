@@ -65,11 +65,11 @@ float RemapRange(float val,float oldMin, float oldMax,float newMin, float newMax
     return newMin+saturate((val-oldMin)/(oldMax-oldMin))*(newMax-newMin);
 }
 
-static  float CLOUD_TOP = 3500.0;
-static  float  CLOUD_BOTTOM = 175.0;
+static  float CLOUD_TOP = 2000.0;
+static  float  CLOUD_BOTTOM = 1000.0;
 
 static const float SHELL_INNER     = 6900.0;
-static const float SHELL_OUTER     = 10000.0;
+static const float SHELL_OUTER     = 15000.0;
 static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;  // 100
 
 float2 RaySphereIntersect(float3 rayOrigin, float3 rayDir, float radius) {
@@ -107,7 +107,7 @@ float GetCloudDensity(float3 WorldPos) {
         return 0;
     }
     float cloudHeightScale = 1;
-    float cloudCoverage = 0.6; //TODO Coverage map. Ideally paintable ingame
+    float cloudCoverage = 0.55; //TODO Coverage map. Ideally paintable ingame
     float minAdjCloudCoverage = saturate(0.0127 / (cloudHeightScale + 0.153));
     float maxAdjCloudCoverage = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
     float adjCloudCoverage = lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
