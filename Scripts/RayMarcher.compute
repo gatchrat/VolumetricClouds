@@ -22,7 +22,7 @@ cbuffer _CloudSettings {
     float _pad0;
     float3 Scale;
     float _pad1;
-    float DensityThreshold;
+    float CloudDensity;
     float DensityMultiplier;
     float TransmittanceFalloff;
     float PowderEffect;
@@ -112,7 +112,7 @@ float GetCloudDensity(float3 WorldPos) {
         return 0;
     }
     float cloudHeightScale = 1;
-    float cloudCoverage = 0.55; //TODO Coverage map. Ideally paintable ingame
+    float cloudCoverage = CloudDensity; //TODO Coverage map. Ideally paintable ingame
     float minAdjCloudCoverage = saturate(0.0127 / (cloudHeightScale + 0.153));
     float maxAdjCloudCoverage = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
     float adjCloudCoverage = lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
@@ -232,9 +232,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
 
-    float3 sunIrradiance = SunColor*SunIntensity; //TODO if i dont implement the fancy atmosphere stuff just replace by single color value
+    float3 sunIrradiance = SunColor*SunIntensity; 
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
-    //inScatter = inScatter * (1.0 + inScatter * 0.8);
     return float4(inScatter*5,1-transmittance);
 }
 float2 IntersectCloudLayer(Ray ray) {

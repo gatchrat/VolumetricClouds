@@ -11,7 +11,7 @@ public struct CloudSettings
     public float _pad0; //Padding to align buffer in memory, otherwise refuses to work
     public Vector3 Scale;
     public float _pad1;
-    public float DensityThreshold;
+    public float CloudDensity;
     public float DensityMultiplier;
     public float TransmittanceFalloff;
     public float PowderEffect;
@@ -37,7 +37,8 @@ public class CloudManager : MonoBehaviour
     public int[] DetailWosleyCellCount = new int[] { 16, 24, 32 };
     public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f };
     public ComputeShader WorleyComputer;
-    public float DensityThreshold = 0.7f; //Used in Renderpass
+    [Range(0.3f, 1f)]
+    public float CloudDensity = 0.55f; //Used in Renderpass
     public int StepCount = 4;
     public float DensityMultiplier = 1f;
     [Range(0.1f, 1f)]
@@ -64,7 +65,7 @@ public class CloudManager : MonoBehaviour
         cloudSettings.BeersEffect = BeersEffect;
         cloudSettings.SunDensityImpact = SunDensityImpact;
         cloudSettings.Scale = Scale;
-        cloudSettings.DensityThreshold = DensityThreshold;
+        cloudSettings.CloudDensity = CloudDensity;
         Offset += new Vector3(1, 0, 1) * (Time.deltaTime / 60) / 3;
         cloudSettings.Offset = Offset;
         cloudSettings.SunDirection = Sun.transform.forward * -1;

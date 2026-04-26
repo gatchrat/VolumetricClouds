@@ -244,7 +244,6 @@ GameObject:
   - component: {fileID: 330585545}
   - component: {fileID: 330585544}
   - component: {fileID: 330585547}
-  - component: {fileID: 330585548}
   - component: {fileID: 330585549}
   m_Layer: 0
   m_Name: Main Camera
@@ -371,41 +370,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!114 &330585548
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 330585543}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0cfc2546a0001f6409122248f791820c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: '::'
-  seed: 22
-  ShapeTextureSize: 128
-  ShapeRenderTexture: {fileID: 0}
-  DetailRenderTexture: {fileID: 0}
-  BlueNoise: {fileID: 2800000, guid: 4e0d699cd8d36834fa792c5923029949, type: 3}
-  ShapeWosleyCellCount: 080000000c0000001400000018000000
-  DetailWosleyCellCount: 04000000080000000c000000
-  fBmWeights:
-  - 0.625
-  - 0.25
-  - 0.125
-  WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
-  DensityThreshold: 0.7
-  StepCount: 100
-  DensityMultiplier: 200
-  TransmittanceFalloff: 0.3
-  PowderEffect: 99.6
-  BeersEffect: 100
-  SunDensityImpact: 0.8
-  Scale: {x: 6, y: 0.1, z: 6}
-  Offset: {x: 0, y: 0, z: 0}
-  CloudsBounds: {fileID: 764791172}
-  Sun: {fileID: 410087041}
 --- !u!114 &330585549
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -434,6 +398,7 @@ GameObject:
   - component: {fileID: 410087041}
   - component: {fileID: 410087040}
   - component: {fileID: 410087042}
+  - component: {fileID: 410087043}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -550,6 +515,41 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!114 &410087043
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 410087039}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cfc2546a0001f6409122248f791820c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CloudManager
+  seed: 22
+  ShapeTextureSize: 128
+  ShapeRenderTexture: {fileID: 0}
+  DetailRenderTexture: {fileID: 0}
+  BlueNoise: {fileID: 2800000, guid: 4e0d699cd8d36834fa792c5923029949, type: 3}
+  ShapeWosleyCellCount: 080000000c0000001400000018000000
+  DetailWosleyCellCount: 04000000080000000c000000
+  fBmWeights:
+  - 0.625
+  - 0.25
+  - 0.125
+  WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
+  CloudDensity: 0.55
+  StepCount: 4
+  DensityMultiplier: 1
+  TransmittanceFalloff: 0.3
+  PowderEffect: 100
+  BeersEffect: 100
+  SunDensityImpact: 0.8
+  Scale: {x: 6, y: 0.1, z: 6}
+  Offset: {x: 0, y: 0, z: 0}
+  CloudsBounds: {fileID: 764791172}
+  Sun: {fileID: 410087041}
 --- !u!1 &764791168
 GameObject:
   m_ObjectHideFlags: 0
