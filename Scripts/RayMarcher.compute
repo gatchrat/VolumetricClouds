@@ -40,6 +40,13 @@ struct Ray {
     float3 origin;
     float3 direction;
 };
+static  float CLOUD_TOP = 2000.0;
+static  float  CLOUD_BOTTOM = 1000.0;
+
+static const float SHELL_INNER     = 6400*10;
+static const float SHELL_OUTER     = 6900*10;
+static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;  // 100
+static const float PLANET_THICKNESS = 6300*10;
 
 //Currently unused
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
@@ -60,7 +67,7 @@ Ray GenerateRay(uint2 pixelCoord) {
     float3 worldDir = mul(_CameraToWorld, float4(viewDir.xyz, 0.0)).xyz;
 
     Ray ray;
-    ray.origin = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz;
+    ray.origin = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz + float3(0,PLANET_THICKNESS,0);
     ray.direction = normalize(worldDir);
     return ray;
 }
@@ -69,13 +76,6 @@ Ray GenerateRay(uint2 pixelCoord) {
 float RemapRange(float val,float oldMin, float oldMax,float newMin, float newMax) {
     return newMin+saturate((val-oldMin)/(oldMax-oldMin))*(newMax-newMin);
 }
-
-static  float CLOUD_TOP = 2000.0;
-static  float  CLOUD_BOTTOM = 1000.0;
-
-static const float SHELL_INNER     = 6900.0;
-static const float SHELL_OUTER     = 15000.0;
-static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;  // 100
 
 float2 RaySphereIntersect(float3 rayOrigin, float3 rayDir, float radius) {
     float b    = dot(rayOrigin, rayDir);
@@ -132,7 +132,8 @@ float GetCloudDensity(float3 WorldPos) {
     //Doom height scaling
     float CloudMinHeight = 20;
     float height = WorldPos.y - CloudMinHeight;
-    float heightInShell = saturate((length(WorldPos) - SHELL_INNER) / SHELL_THICKNESS);
+    float distSq = dot(WorldPos, WorldPos);
+    float heightInShell = saturate((sqrt(distSq) - SHELL_INNER) / SHELL_THICKNESS);
     height = heightInShell * CLOUD_TOP;
     float topHeight = RemapRange(cloudHeightScale,0.0,1.0,0.7*Adjusted_Bottom,Adjusted_Top); //always Cloud_top since cloudHeightScale = 1 
     topHeight = Adjusted_Top;
@@ -183,6 +184,9 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
         float3 samplePos = viewPos +t*viewDir;
+        if(samplePos.y-PLANET_THICKNESS <0) {
+            break;
+        }
         float density = GetCloudDensity(samplePos);
         float shadowOpticalDepth = 0.0; 
         if(density > 0) {
@@ -236,28 +240,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
     return float4(inScatter*5,1-transmittance);
 }
-float2 IntersectCloudLayer(Ray ray) {
-    float Steigung = ray.direction.y; // We only need steigung to check if and when we will hit cloud layer from our pos
 
-    bool insideLayer = ray.origin.y >= CLOUD_BOTTOM && ray.origin.y <= CLOUD_TOP;
-
-    if (insideLayer) {
-        if (abs(Steigung) < 0.01) return float2(0, 30000);
-        // Already inside: start at 0, exit is whichever boundary we hit first
-        float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
-        float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
-        float tExit = Steigung > 0 ? tTop : tBottom;
-        return float2(0, tExit);
-    } else {
-        if (abs(Steigung) < 0.01) return float2(-1, -1);
-        float tBottom = (CLOUD_BOTTOM - ray.origin.y) / Steigung;
-        float tTop    = (CLOUD_TOP    - ray.origin.y) / Steigung;
-        float tEnter = Steigung > 0 ? tBottom : tTop;
-        float tExit  = Steigung > 0 ? tTop    : tBottom;
-        if (tEnter < 0 || tExit < tEnter) return float2(-1, -1); 
-        return float2(tEnter, tExit);
-    }
-}
 uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
     //Scale up by 4 and decide current pos in 4x4 square to achieve 16 pixel temporal
     //Scale 4x4 up to 16x16
