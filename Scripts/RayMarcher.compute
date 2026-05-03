@@ -25,9 +25,9 @@ cbuffer _CloudSettings {
     float CloudDensity;
     float DensityMultiplier;
     float TransmittanceFalloff;
-    float PowderEffect;
+    float PowderStrength;
     float BeersEffect;
-    float SunDensityImpact;
+    float SunBlindingEffectSize;
     float _pad4;
     float _pad5;
     float3 SunColor;
@@ -170,7 +170,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float ShadowStepSize = 800;
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
     viewPos +=viewDir*rayOffset;
-    float betaE =  0.05;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
+    float betaE =  0.03;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
     float sigS_over_sigE = 1.0; //general energy multiplier
     float VdotL = dot(viewDir,sunDir);
 
@@ -208,8 +208,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         float _dTr = transmittance-nextTransmittance;
 
         //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, 0.35)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
-        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, 0.35)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
+        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
 
         ambientInScatterN += sigS_over_sigE *powder*_dTr;
         distSum +=t*_dTr;
@@ -224,8 +224,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float backLobeWeight = 0.1;
 
     //Angle aligns with directly looking at sun -> extra light because sun doesnt like going around corners :P
-    sunInScatterN0 *= HGPhase2Lobe(VdotL,anisotropyFront,anisotropyBack,backLobeWeight);
-    sunInScatterN1 *= HGPhase2Lobe(VdotL,0.5*anisotropyFront,0.5*anisotropyBack,backLobeWeight);
+    sunInScatterN0 *= lerp(HGPhase2Lobe(VdotL,anisotropyFront,anisotropyBack,backLobeWeight),0.5,1-SunBlindingEffectSize);
+    sunInScatterN1 *= lerp(HGPhase2Lobe(VdotL,0.5*anisotropyFront,0.5*anisotropyBack,backLobeWeight),0.5,1-SunBlindingEffectSize);
 
     ambientInScatterNNoPowder = (1-transmittance)*sigS_over_sigE;
     ambientInScatterN = lerp(ambientInScatterNNoPowder,ambientInScatterN,0.35);//Lerp powder, because lowkey cringe for dark borders around cloud

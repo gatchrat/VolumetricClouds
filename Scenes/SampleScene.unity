@@ -543,9 +543,10 @@ MonoBehaviour:
   StepCount: 4
   DensityMultiplier: 1
   TransmittanceFalloff: 0.3
-  PowderEffect: 100
+  PowderEffect: 0.35
   BeersEffect: 100
-  SunDensityImpact: 0.8
+  SunBlindingEffectStrengh: 0.2
+  CloudMovementSpeed: 1
   Scale: {x: 6, y: 0.1, z: 6}
   Offset: {x: 0, y: 0, z: 0}
   CloudsBounds: {fileID: 764791172}

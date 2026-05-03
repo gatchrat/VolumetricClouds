@@ -14,9 +14,9 @@ public struct CloudSettings
     public float CloudDensity;
     public float DensityMultiplier;
     public float TransmittanceFalloff;
-    public float PowderEffect;
+    public float PowderStrength;
     public float BeersEffect;
-    public float SunDensityImpact;
+    public float SunBlindingEffectSize;
     public float _pad4;
     public float _pad5;
     public float3 SunColor;
@@ -43,12 +43,12 @@ public class CloudManager : MonoBehaviour
     public float DensityMultiplier = 1f;
     [Range(0.1f, 1f)]
     public float TransmittanceFalloff = 0.3f;
-    [Range(0f, 100f)]
-    public float PowderEffect = 100f;
+    [Range(0f, 1)]
+    public float PowderEffect = 0.35f;
     [Range(0f, 100f)]
     public float BeersEffect = 100f;
-    [Range(0.2f, 2f)]
-    public float SunDensityImpact = 0.8f;
+    [Range(0f, 1f)]
+    public float SunBlindingEffectStrengh = 1f;
     [Range(0f, 10f)]
     public float CloudMovementSpeed = 1f;
     public Vector3 Scale = new Vector3(1, 1, 1);
@@ -63,9 +63,9 @@ public class CloudManager : MonoBehaviour
     {
         cloudSettings.DensityMultiplier = DensityMultiplier;
         cloudSettings.TransmittanceFalloff = TransmittanceFalloff;
-        cloudSettings.PowderEffect = PowderEffect;
+        cloudSettings.PowderStrength = PowderEffect;
         cloudSettings.BeersEffect = BeersEffect;
-        cloudSettings.SunDensityImpact = SunDensityImpact;
+        cloudSettings.SunBlindingEffectSize = SunBlindingEffectStrengh;
         cloudSettings.Scale = Scale;
         cloudSettings.CloudDensity = CloudDensity;
         Offset += new Vector3(1, 0, 1) * ((Time.deltaTime / 60) / 3) * CloudMovementSpeed;
