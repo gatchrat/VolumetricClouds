@@ -27,6 +27,7 @@ public class CloudRendererFeature : ScriptableRendererFeature
         _pass.UpdateSettings(Manager.cloudSettings);
         _pass.BlueNoiseTexture = Manager.BlueNoise;
         _pass.DetailRenderTexture = Manager.DetailRenderTexture;
+        _pass.CurFrameMovement = Manager.GetMovementOffset();
         Bounds CloudBounds = new Bounds();
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;

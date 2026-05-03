@@ -52,12 +52,14 @@ public class CloudManager : MonoBehaviour
     [Range(0f, 10f)]
     public float CloudMovementSpeed = 1f;
     public Vector3 Scale = new Vector3(1, 1, 1);
-    public Vector3 Offset;
+    public float3 Offset;
     public Transform CloudsBounds;
     public Transform Sun;
     private Light SunLight;
 
     public CloudSettings cloudSettings;
+
+    private float3 CurFrameMovement;
 
     void Update()
     {
@@ -68,11 +70,16 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunBlindingEffectSize = SunBlindingEffectStrengh;
         cloudSettings.Scale = Scale;
         cloudSettings.CloudDensity = CloudDensity;
-        Offset += new Vector3(1, 0, 1) * ((Time.deltaTime / 60) / 3) * CloudMovementSpeed;
+        CurFrameMovement = new Vector3(1, 0, 1) * ((Time.deltaTime / 60) / 3) * CloudMovementSpeed;
+        Offset += CurFrameMovement;
         cloudSettings.Offset = Offset;
         cloudSettings.SunDirection = Sun.transform.forward * -1;
         cloudSettings.SunColor = new Vector3(SunLight.color.r, SunLight.color.g, SunLight.color.b);
         cloudSettings.SunIntensity = SunLight.intensity;
+    }
+    public float3 GetMovementOffset()
+    {
+        return CurFrameMovement;
     }
 
     void Start()

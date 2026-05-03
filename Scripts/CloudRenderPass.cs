@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering.RenderGraphModule;
+using Unity.Mathematics;
 
 public class CloudRenderPass : ScriptableRenderPass
 {
@@ -9,6 +10,7 @@ public class CloudRenderPass : ScriptableRenderPass
     private ComputeShader UpscaleShader;
     private ComputeShader MergeShader;
     public Bounds Bounds;
+    public float3 CurFrameMovement;
     private int _raymarchKernel;
     private int _upscaleKernel;
     private int _mergeKernel;
@@ -138,6 +140,7 @@ public class CloudRenderPass : ScriptableRenderPass
         public Matrix4x4 currInvViewProj;
         public Matrix4x4 currViewProj;
         public Vector3 cameraPos;
+        public Vector3 CurFrameMovement;
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -171,6 +174,7 @@ public class CloudRenderPass : ScriptableRenderPass
             data.upscaleKernel = _upscaleKernel;
             data.mergeKernel = _mergeKernel;
             data.bounds = Bounds;
+            data.CurFrameMovement = CurFrameMovement;
             data.camera = cameraData.camera;
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
@@ -251,6 +255,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeVectorParam(d.upscaleShader, "_CameraPos", d.cameraPos);
                 cmd.SetComputeIntParam(d.upscaleShader, "_FrameIndex", Time.frameCount);
+                cmd.SetComputeVectorParam(d.upscaleShader, "MovementOffset", d.CurFrameMovement);
 
                 int groupsX = Mathf.CeilToInt(d.fullWidth / 8f);
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
