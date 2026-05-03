@@ -49,6 +49,8 @@ public class CloudManager : MonoBehaviour
     public float BeersEffect = 100f;
     [Range(0.2f, 2f)]
     public float SunDensityImpact = 0.8f;
+    [Range(0f, 10f)]
+    public float CloudMovementSpeed = 1f;
     public Vector3 Scale = new Vector3(1, 1, 1);
     public Vector3 Offset;
     public Transform CloudsBounds;
@@ -66,7 +68,7 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunDensityImpact = SunDensityImpact;
         cloudSettings.Scale = Scale;
         cloudSettings.CloudDensity = CloudDensity;
-        Offset += new Vector3(1, 0, 1) * (Time.deltaTime / 60) / 3;
+        Offset += new Vector3(1, 0, 1) * ((Time.deltaTime / 60) / 3) * CloudMovementSpeed;
         cloudSettings.Offset = Offset;
         cloudSettings.SunDirection = Sun.transform.forward * -1;
         cloudSettings.SunColor = new Vector3(SunLight.color.r, SunLight.color.g, SunLight.color.b);

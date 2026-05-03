@@ -43,10 +43,10 @@ struct Ray {
 static  float CLOUD_TOP = 2000.0;
 static  float  CLOUD_BOTTOM = 1000.0;
 
-static const float SHELL_INNER     = 6400*10;
-static const float SHELL_OUTER     = 6900*10;
-static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;  // 100
-static const float PLANET_THICKNESS = 6300*10;
+static const float SHELL_INNER     = 6400*100;
+static const float SHELL_OUTER     = 6800*100;
+static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;
+static const float PLANET_THICKNESS = 6300*100; //630.000
 
 //Currently unused
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
@@ -119,7 +119,7 @@ float GetCloudDensity(float3 WorldPos) {
     float Adjusted_Bottom = CLOUD_BOTTOM;
     float Adjusted_Top = CLOUD_TOP;
 
-    float ShapeTiling = 0.0001;
+    float ShapeTiling = 0.00001;
     float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
     ShapeNoisePos += Offset;
     float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos, 0).xy;
@@ -166,8 +166,8 @@ float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunDirection);
-    float stepSize = 50;
-    float ShadowStepSize = 80;
+    float stepSize = 250;
+    float ShadowStepSize = 800;
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
     viewPos +=viewDir*rayOffset;
     float betaE =  0.05;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
