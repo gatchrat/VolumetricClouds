@@ -166,10 +166,7 @@ float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunDirection);
-    float stepSize = 250;
-    float ShadowStepSize = 800;
-    float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
-    viewPos +=viewDir*rayOffset;
+
     float betaE =  0.03;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
     float sigS_over_sigE = 1.0; //general energy multiplier
     float VdotL = dot(viewDir,sunDir);
@@ -181,6 +178,16 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float ambientInScatterN = 0.0;
     float ambientInScatterNNoPowder = 0.0;
     float distSum = 0.0;
+
+    //Stepping optimisation
+    int stepsWithoutCloud = 0;
+    float stepSize = 250;
+    float ShadowStepSize = 800;
+    bool BigSteps = true;
+    float BigStepMultiplier = 3.0;
+
+    float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
+    viewPos +=viewDir*rayOffset;
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
         float3 samplePos = viewPos +t*viewDir;
@@ -190,7 +197,14 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         float density = GetCloudDensity(samplePos);
         float shadowOpticalDepth = 0.0; 
         if(density > 0) {
-            //return float4(density,density,density,0.5);
+            stepsWithoutCloud = 0;
+            if(BigSteps) {
+                //revert big step and start small steps to find exact cloud start
+                BigSteps = false;
+                t-=stepSize*BigStepMultiplier;
+                continue;
+            }
+
             float3 samplePosShadow = samplePos;
             float prevShadowDensity = density;
             for(int i=0;i<numShadowSteps;++i) {
@@ -199,6 +213,14 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
                 float shadowDensity = GetCloudDensity(samplePosShadow);
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
                 prevShadowDensity = shadowDensity;
+            }
+        }else {
+            if(!BigSteps) {
+                stepsWithoutCloud +=1;
+                if(stepsWithoutCloud > BigStepMultiplier+1) {
+                    BigSteps = true;
+                    stepsWithoutCloud = 0;
+                }
             }
         }
         float sigE = betaE*density;
@@ -214,7 +236,12 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         ambientInScatterN += sigS_over_sigE *powder*_dTr;
         distSum +=t*_dTr;
 
-        t+=stepSize;
+        if(BigSteps) {
+            t+=stepSize*BigStepMultiplier;
+        }else {
+            t+=stepSize;
+        }
+
         transmittance = nextTransmittance;
         if(transmittance<0.01) break;
     }
