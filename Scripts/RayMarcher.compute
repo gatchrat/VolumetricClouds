@@ -23,7 +23,7 @@ cbuffer _CloudSettings {
     float3 Scale;
     float _pad1;
     float CloudDensity;
-    float DensityMultiplier;
+    float BrightnesMultiplier;
     float TransmittanceFalloff;
     float PowderStrength;
     float BeersEffect;
@@ -40,11 +40,11 @@ struct Ray {
     float3 origin;
     float3 direction;
 };
-static  float CLOUD_TOP = 2000.0;
-static  float  CLOUD_BOTTOM = 1000.0;
+static  float CLOUD_TOP = 4000.0;
+static  float  CLOUD_BOTTOM = 500.0;
 
 static const float SHELL_INNER     = 6400*100;
-static const float SHELL_OUTER     = 6800*100;
+static const float SHELL_OUTER     = 6500*100;
 static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;
 static const float PLANET_THICKNESS = 6300*100; //630.000
 
@@ -107,7 +107,24 @@ bool isInShell(float3 Worldpos) {
     }
     return false;
 }
-float GetCloudDensity(float3 WorldPos) {
+int SelectMipForWorldPos(float3 Pos) {
+    //Choose mipmap level based on angle 
+    //(0,1,0) = up = closest = max mip 
+    //(1,0,0) = sidewards = at horizon = min mip
+    return 0; //stability for cache has more impact than sampling a simpler mip level :/
+    Pos = normalize(Pos);
+    if(Pos.y > 0.9) {
+        return 0;
+    }
+    if(Pos.y > 0.4) {
+        return 1;
+    }
+    if(Pos.y > 0.1) {
+        return 2;
+    }
+    return 3;
+}
+float GetCloudDensity(float3 WorldPos, float MipMap) {
     if(!isInShell(WorldPos)) {
         return 0;
     }
@@ -122,7 +139,7 @@ float GetCloudDensity(float3 WorldPos) {
     float ShapeTiling = 0.00001;
     float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
     ShapeNoisePos += Offset;
-    float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos, 0).xy;
+    float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos,MipMap).xy;
     float ShapeWorley = ShapeNoise.x;
     float ShapePerlin = ShapeNoise.y;
 
@@ -167,8 +184,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     int numShadowSteps = 6;
     float3 sunDir = normalize(SunDirection);
 
-    float betaE =  0.03;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
-    float sigS_over_sigE = 1.0; //general energy multiplier
+    float betaE =  0.003;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
+    float sigS_over_sigE = BrightnesMultiplier; //general energy multiplier
     float VdotL = dot(viewDir,sunDir);
 
     float t = tMin;
@@ -188,13 +205,14 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
     viewPos +=viewDir*rayOffset;
+    float MipMap = SelectMipForWorldPos(viewPos);
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
         float3 samplePos = viewPos +t*viewDir;
         if(samplePos.y-PLANET_THICKNESS <0) {
             break;
         }
-        float density = GetCloudDensity(samplePos);
+        float density = GetCloudDensity(samplePos,MipMap);
         float shadowOpticalDepth = 0.0; 
         if(density > 0) {
             stepsWithoutCloud = 0;
@@ -210,10 +228,26 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             for(int i=0;i<numShadowSteps;++i) {
                 //TODO replace by pre-caclced values
                 samplePosShadow += ShadowStepSize*sunDir;
-                float shadowDensity = GetCloudDensity(samplePosShadow);
+                float shadowDensity = GetCloudDensity(samplePosShadow,MipMap);
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
                 prevShadowDensity = shadowDensity;
             }
+
+            float sigE = betaE*density;
+            float powder = 4.0*(1.0-exp(-2.0*density));
+            float shadowTransmittance = exp(-shadowOpticalDepth);
+            float nextTransmittance = transmittance*exp(-sigE*stepSize);
+            float _dTr = transmittance-nextTransmittance;
+
+            //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
+            sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
+            sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+
+            ambientInScatterN += sigS_over_sigE *powder*_dTr;
+            distSum +=t*_dTr;
+
+            transmittance = nextTransmittance;
+            if(transmittance<0.01) break;
         }else {
             if(!BigSteps) {
                 stepsWithoutCloud +=1;
@@ -223,35 +257,20 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
                 }
             }
         }
-        float sigE = betaE*density;
-        float powder = 4.0*(1.0-exp(-2.0*density));
-        float shadowTransmittance = exp(-shadowOpticalDepth);
-        float nextTransmittance = transmittance*exp(-sigE*stepSize);
-        float _dTr = transmittance-nextTransmittance;
-
-        //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-        sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
-        sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
-
-        ambientInScatterN += sigS_over_sigE *powder*_dTr;
-        distSum +=t*_dTr;
 
         if(BigSteps) {
             t+=stepSize*BigStepMultiplier;
         }else {
             t+=stepSize;
         }
-
-        transmittance = nextTransmittance;
-        if(transmittance<0.01) break;
     }
 
-    float anisotropyFront = 0.8;
-    float anisotropyBack = -0.3;
-    float backLobeWeight = 0.1;
+    float anisotropyFront = 0.9;
+    float anisotropyBack = -0.1;
+    float backLobeWeight = 0.9;
 
     //Angle aligns with directly looking at sun -> extra light because sun doesnt like going around corners :P
-    sunInScatterN0 *= lerp(HGPhase2Lobe(VdotL,anisotropyFront,anisotropyBack,backLobeWeight),0.5,1-SunBlindingEffectSize);
+    sunInScatterN0 *= lerp(HGPhase2Lobe(VdotL,anisotropyFront,anisotropyBack,backLobeWeight),0.5,1-SunBlindingEffectSize*2);
     sunInScatterN1 *= lerp(HGPhase2Lobe(VdotL,0.5*anisotropyFront,0.5*anisotropyBack,backLobeWeight),0.5,1-SunBlindingEffectSize);
 
     ambientInScatterNNoPowder = (1-transmittance)*sigS_over_sigE;
@@ -265,7 +284,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float3 sunIrradiance = SunColor*SunIntensity; 
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
-    return float4(inScatter*5,1-transmittance);
+    return float4(inScatter,1-transmittance);
 }
 
 uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {

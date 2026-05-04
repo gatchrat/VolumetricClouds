@@ -12,7 +12,7 @@ public struct CloudSettings
     public Vector3 Scale;
     public float _pad1;
     public float CloudDensity;
-    public float DensityMultiplier;
+    public float BrightnesMultiplier;
     public float TransmittanceFalloff;
     public float PowderStrength;
     public float BeersEffect;
@@ -40,7 +40,8 @@ public class CloudManager : MonoBehaviour
     [Range(0.3f, 1f)]
     public float CloudDensity = 0.55f; //Used in Renderpass
     public int StepCount = 4;
-    public float DensityMultiplier = 1f;
+    [Range(1f, 10f)]
+    public float BrightnesMultiplier = 1f;
     [Range(0.1f, 1f)]
     public float TransmittanceFalloff = 0.3f;
     [Range(0f, 1)]
@@ -63,7 +64,7 @@ public class CloudManager : MonoBehaviour
 
     void Update()
     {
-        cloudSettings.DensityMultiplier = DensityMultiplier;
+        cloudSettings.BrightnesMultiplier = BrightnesMultiplier;
         cloudSettings.TransmittanceFalloff = TransmittanceFalloff;
         cloudSettings.PowderStrength = PowderEffect;
         cloudSettings.BeersEffect = BeersEffect;
@@ -97,7 +98,7 @@ public class CloudManager : MonoBehaviour
             DetailRenderTexture.Release();
         }
 
-        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, GraphicsFormat.R32G32B32A32_SFloat)
+        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, GraphicsFormat.R8G8B8A8_UNorm) //INSANE Importance. No noticable difference to 32bit float in quality but 360 vs 620 fps
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
@@ -109,7 +110,7 @@ public class CloudManager : MonoBehaviour
         };
         ShapeRenderTexture.Create();
 
-        DetailRenderTexture = new RenderTexture(32, 32, 0, GraphicsFormat.R32G32B32A32_SFloat)
+        DetailRenderTexture = new RenderTexture(32, 32, 0, GraphicsFormat.R8G8B8A8_UNorm)
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
