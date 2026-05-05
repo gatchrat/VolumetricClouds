@@ -228,7 +228,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             for(int i=0;i<numShadowSteps;++i) {
                 //TODO replace by pre-caclced values
                 samplePosShadow += ShadowStepSize*sunDir;
-                float shadowDensity = GetCloudDensity(samplePosShadow,MipMap);
+                float shadowDensity = GetCloudDensity(samplePosShadow,MipMap)*TransmittanceFalloff;
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
                 prevShadowDensity = shadowDensity;
             }
@@ -278,7 +278,11 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     ambientInScatterN *= 1.0/(4.0*3.1415);
 
     float avgCloudDist = distSum /(1.0-transmittance);
+    if(transmittance<1) {
     depth= avgCloudDist; 
+    }else {
+        depth =length(viewPos +tMax*viewDir); // Fallback for cirrus
+    }
 
     float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
 
