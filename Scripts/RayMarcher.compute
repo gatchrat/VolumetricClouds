@@ -57,7 +57,7 @@ static const float SHELL_INNER     = 6400*100;
 static const float SHELL_OUTER     = 6500*100;
 static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;
 static const float PLANET_THICKNESS = 6300*100; //630.000
-static const float LIGHTNING_MAX_DISTANCE = 200*100;
+static const float LIGHTNING_MAX_DISTANCE = 20*100;
 
 //Currently unused
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
@@ -190,16 +190,15 @@ float HGPhase (float cos_angle , float inG) {
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
-float3 GetLightSourceDirection(float3 WorldPos) {
+bool GetLightSourceDirection(float3 WorldPos, out float3 Dir,out float dist) {
     float3 bestDelta    = SunDirection; 
     float  bestDistSq   = LIGHTNING_MAX_DISTANCE * LIGHTNING_MAX_DISTANCE;
     bool   hitAny       = false;
 
     for (uint i = 0; i < _LightningCount; i++) {
-        float3 LightningPos = Lightnings[i].origin*10;
-        LightningPos.y = WorldPos.y;
+        float3 LightningPos = Lightnings[i].origin;
         float3 toPos  = WorldPos - LightningPos;
-        float  t      = clamp(dot(toPos, Lightnings[i].direction), 0.0, Lightnings[i].segmentLength*10);
+        float  t      = clamp(dot(toPos, Lightnings[i].direction), 0.0, Lightnings[i].segmentLength);
         float3 closest = LightningPos+ Lightnings[i].direction * t;
 
         float3 delta  = closest - WorldPos;
@@ -211,8 +210,12 @@ float3 GetLightSourceDirection(float3 WorldPos) {
             hitAny     = true;
         }
     }
-
-    return hitAny ? bestDelta : SunDirection;
+    if(hitAny) {
+        Dir = bestDelta;
+        dist = bestDistSq;
+        return true;
+    }
+    return false;
 }
 //Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
@@ -228,19 +231,22 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float sunInScatterN1 =0.0;
     float ambientInScatterN = 0.0;
     float ambientInScatterNNoPowder = 0.0;
+    float LightningScatter = 0.0;
     float distSum = 0.0;
 
     //Stepping optimisation
     int stepsWithoutCloud = 0;
     float stepSize = 250;
     float ShadowStepSize = 800;
+    float LightningStepSize = 100;
+    int LightningCount = 0;
+    float OverallLightningDist = 0;
     bool BigSteps = true;
     float BigStepMultiplier = 3.0;
 
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
     viewPos +=viewDir*rayOffset;
     float MipMap = SelectMipForWorldPos(viewPos);
-    float3 LightSourceColor = SunColor;
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
         float3 samplePos = viewPos +t*viewDir;
@@ -249,6 +255,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         }
         float density = GetCloudDensity(samplePos,MipMap);
         float shadowOpticalDepth = 0.0; 
+        float LightningOpticalDepth = 0.0; 
         if(density > 0) {
             stepsWithoutCloud = 0;
             if(BigSteps) {
@@ -260,19 +267,9 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
             float3 samplePosShadow = samplePos;
             float prevShadowDensity = density;
-            float3 sunDir = GetLightSourceDirection(samplePos);
-            float LightIntensity = 1;
-            //Change color based on sun or lighning
-            if (sunDir.y != SunDirection.y) {
-                float NormalizedDistance = (1-(length(sunDir)/LIGHTNING_MAX_DISTANCE));
-                LightSourceColor += float3(0,0,1)* NormalizedDistance*NormalizedDistance*NormalizedDistance*1;
-                LightIntensity =3 *exp(-(1-NormalizedDistance) * 30.0) * 50.0;
-                sunDir = normalize(sunDir);
-                ShadowStepSize = 80;
-            }else {
-                LightSourceColor += SunColor;
-                ShadowStepSize = 800;
-            }
+            //SUN
+            float3 sunDir =SunDirection;
+
             for(int i=0;i<numShadowSteps;++i) {
                 samplePosShadow += ShadowStepSize*sunDir;
                 float shadowDensity = GetCloudDensity(samplePosShadow,MipMap)*TransmittanceFalloff;
@@ -285,10 +282,25 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             float shadowTransmittance = exp(-shadowOpticalDepth);
             float nextTransmittance = transmittance*exp(-sigE*stepSize);
             float _dTr = transmittance-nextTransmittance;
+            //LIGHTNING
+            samplePosShadow = samplePos;
+            prevShadowDensity = density;
+            float curDist = 0;
+            if(GetLightSourceDirection(samplePos,sunDir,curDist)) {
+                OverallLightningDist+= curDist;
+                LightningCount+=1;
+                for(int i=0;i<numShadowSteps;++i) {
+                    samplePosShadow += ShadowStepSize*sunDir;
+                    float shadowDensity = GetCloudDensity(samplePosShadow,MipMap)*TransmittanceFalloff;
+                    LightningOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
+                    prevShadowDensity = shadowDensity;
+                }
+                LightningScatter += exp(-LightningOpticalDepth)*_dTr;
+            }
 
             //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-            sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr*LightIntensity; //Two Octaves of sunshine, doom innovation 
-            sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr*LightIntensity; //Lerp powder, because lowkey cringe for dark borders around cloud
+            sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
+            sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
 
             ambientInScatterN += sigS_over_sigE *powder*_dTr;
             distSum +=t*_dTr;
@@ -333,8 +345,13 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
 
-    float3 sunIrradiance = normalize(LightSourceColor)*SunIntensity; 
+    float3 sunIrradiance = normalize(SunColor)*SunIntensity; 
+    float LightningMultiplier = 0;
+    if(LightningCount>0) {
+        LightningMultiplier =1-(OverallLightningDist/LightningCount)/(LIGHTNING_MAX_DISTANCE*LIGHTNING_MAX_DISTANCE);
+    }
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
+    inScatter = lerp(inScatter,inScatter+LightningScatter*float3(0,0,1)*LightningMultiplier,LightningMultiplier);
     return float4(inScatter,1-transmittance);
 }
 
