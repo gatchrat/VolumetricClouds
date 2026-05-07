@@ -77,10 +77,11 @@ public class CloudManager : MonoBehaviour
     private float3 CurFrameMovement;
 
     private float LightningTimer = 3f;
-    private int curLightningLayer = 1;
+    private int curLightningLayer = 0;
     private float flickerTimer = 0.1f;
     private List<int> LightningCounttLayer;
     public GameObject LightningAudioPrefab;
+    public LineRenderer LightningLine;
 
     void Update()
     {
@@ -157,9 +158,8 @@ public class CloudManager : MonoBehaviour
         }
         if (LightningTimer < 1f && curLightningLayer == 1)
         {
-            LightningTimer = 2.99f;
+            LightningTimer = UnityEngine.Random.Range(1f, 5f) + 3f;
             RemoveLightningLayer();
-            CreateLightning();
         }
 
 
@@ -290,7 +290,6 @@ public class CloudManager : MonoBehaviour
     }
     void CreateLightning()
     {
-        Debug.Log("CreateAssetMenuAttribute");
         float shellInner = 6410 * 100f;
         float shellOuter = 6410 * 100f;
 
@@ -309,18 +308,31 @@ public class CloudManager : MonoBehaviour
 
         Lightning Root = new Lightning();
         Root.origin = Unity.Mathematics.math.normalize(dir) * radius;
-        //Root.origin = new float3(0, shellInner, 0);
-        Debug.Log(Root.origin);
         Root.direction = new float3(UnityEngine.Random.Range(-1f, 1f), 0, UnityEngine.Random.Range(-1f, 1f));
         Root.length = 10000;
-        Lightnings = new List<Lightning>();
         Lightnings.Add(Root);
         LightningCounttLayer.Add(1);
         curLightningLayer = 1;
+        AddLightningToLineRenderer(Root);
 
-        //Vector3 Position = Unity.Mathematics.math.normalize(Lightnings[0].origin) * 100;
-        //GameObject.Instantiate(LightningAudioPrefab, Position, this.transform.rotation);
+
+        Vector3 Position = Unity.Mathematics.math.normalize(Lightnings[0].origin) * 100;
+        GameObject.Instantiate(LightningAudioPrefab, Position, this.transform.rotation);
         //https://freesound.org/people/fattirewhitey/sounds/523905/
+    }
+    private void AddLightningToLineRenderer(Lightning l)
+    {
+        LightningLine.widthMultiplier = 1;
+        LightningLine.endWidth = 0.5f;
+        LightningLine.positionCount += 1;
+        float3 CameraPos = Camera.main.transform.position;
+        LightningLine.SetPosition(LightningLine.positionCount - 1, (l.origin - new float3(0, 6300 * 100, 0)) * 0.01f + CameraPos);
+        LightningLine.positionCount += 1;
+        LightningLine.SetPosition(LightningLine.positionCount - 1, (l.origin - new float3(0, 6300 * 100, 0) + l.direction * l.length) * 0.01f + CameraPos);
+    }
+    private void RemoveLightningToLineRenderer(int Count)
+    {
+        LightningLine.positionCount -= 2 * Count;
     }
     private void AddLightningLayer()
     {
@@ -338,6 +350,7 @@ public class CloudManager : MonoBehaviour
     private void RemoveLightningLayer()
     {
         int LastLayerCount = LightningCounttLayer.Last();
+        RemoveLightningToLineRenderer(LastLayerCount);
         for (int i = 0; i < LastLayerCount; i++)
         {
             Lightnings.RemoveAt(Lightnings.Count - 1);
@@ -354,17 +367,20 @@ public class CloudManager : MonoBehaviour
         }
         Lightning A = new Lightning();
         A.origin = l.origin + l.direction * l.length;
-        A.direction = l.direction + new float3(UnityEngine.Random.Range(0, 0.5f), UnityEngine.Random.Range(-0.2f, 0.2f), UnityEngine.Random.Range(-0.5f, 0.5f));
+        A.direction = l.direction + new float3(UnityEngine.Random.Range(0, 0.5f), 0, UnityEngine.Random.Range(-0.5f, 0.5f));
         A.direction = Unity.Mathematics.math.normalize(A.direction);
         A.length = l.length * UnityEngine.Random.Range(0.3f, 1f);
         ls.Add(A);
 
+        AddLightningToLineRenderer(A);
+
         Lightning B = new Lightning();
         B.origin = l.origin + l.direction * l.length;
-        B.direction = l.direction + new float3(UnityEngine.Random.Range(-0.5f, 0), UnityEngine.Random.Range(-0.2f, 0.2f), UnityEngine.Random.Range(-0.5f, 0.5f));
+        B.direction = l.direction + new float3(UnityEngine.Random.Range(-0.5f, 0), 0, UnityEngine.Random.Range(-0.5f, 0.5f));
         B.direction = Unity.Mathematics.math.normalize(B.direction);
         B.length = l.length * UnityEngine.Random.Range(0.3f, 1f);
         ls.Add(B);
+        AddLightningToLineRenderer(B);
         return ls;
     }
 }
