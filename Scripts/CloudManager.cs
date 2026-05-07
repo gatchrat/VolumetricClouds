@@ -3,7 +3,18 @@ using System;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Experimental.GlobalIllumination;
 using Unity.Mathematics;
+using System.Collections.Generic;
+using UnityEngine.UIElements;
+using Unity.VisualScripting;
 
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+public struct Lightning
+{
+    public float3 origin;
+    public float _pad0; //Padding to align buffer in memory, otherwise refuses to work
+    public float3 direction;
+    public float length;
+}
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct CloudSettings
 {
@@ -37,13 +48,13 @@ public class CloudManager : MonoBehaviour
     public int[] DetailWosleyCellCount = new int[] { 16, 24, 32 };
     public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f };
     public ComputeShader WorleyComputer;
-    [Range(0.3f, 1f)]
+    [Range(0f, 1f)]
     public float CloudDensity = 0.55f; //Used in Renderpass
     public int StepCount = 4;
     [Range(1f, 10f)]
     public float BrightnesMultiplier = 1f;
-    [Range(0.1f, 1f)]
-    public float TransmittanceFalloff = 0.3f;
+    [Range(0.1f, 20f)]
+    public float TransmittanceFalloff = 1f;
     [Range(0f, 1)]
     public float PowderEffect = 0.35f;
     [Range(0f, 100f)]
@@ -58,9 +69,14 @@ public class CloudManager : MonoBehaviour
     public Transform Sun;
     private Light SunLight;
 
+    public List<Lightning> Lightnings;
+
     public CloudSettings cloudSettings;
 
     private float3 CurFrameMovement;
+
+    private float LightningTimer = 3f;
+    public GameObject LightningAudioPrefab;
 
     void Update()
     {
@@ -77,6 +93,13 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunDirection = Sun.transform.forward * -1;
         cloudSettings.SunColor = new Vector3(SunLight.color.r, SunLight.color.g, SunLight.color.b);
         cloudSettings.SunIntensity = SunLight.intensity;
+
+        LightningTimer -= Time.deltaTime;
+        if (LightningTimer < 0)
+        {
+            LightningTimer = 3f;
+            CreateLightning();
+        }
     }
     public float3 GetMovementOffset()
     {
@@ -85,6 +108,8 @@ public class CloudManager : MonoBehaviour
 
     void Start()
     {
+        CreateLightning();
+
         UnityEngine.Random.InitState(seed);
         SunLight = Sun.GetComponent<Light>();
 
@@ -105,8 +130,7 @@ public class CloudManager : MonoBehaviour
             volumeDepth = ShapeTextureSize,
             wrapMode = TextureWrapMode.Repeat,
             filterMode = FilterMode.Trilinear,
-            useMipMap = true,
-            autoGenerateMips = false
+            useMipMap = false
         };
         ShapeRenderTexture.Create();
 
@@ -117,11 +141,9 @@ public class CloudManager : MonoBehaviour
             volumeDepth = 32,
             wrapMode = TextureWrapMode.Repeat,
             filterMode = FilterMode.Trilinear,
-            useMipMap = true,
-            autoGenerateMips = false
+            useMipMap = false
         };
         DetailRenderTexture.Create();
-
 
         int CurrentKernel;
 
@@ -193,8 +215,41 @@ public class CloudManager : MonoBehaviour
 
 
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
+    }
+    void CreateLightning()
+    {
+        int layers = 4;
+        Lightning Root = new Lightning();
+        Root.origin = new float3(UnityEngine.Random.Range(-10000f, 10000f), 0, UnityEngine.Random.Range(-10000f, 10000f));
+        Root.direction = new float3(1, 0, 0);
+        Root.length = 1000;
+        Lightnings = GetLightningLayer(Root, layers);
 
-        ShapeRenderTexture.GenerateMips();
-        DetailRenderTexture.GenerateMips();
+        //Vector3 Position = Unity.Mathematics.math.normalize(Lightnings[0].origin) * 100;
+        //GameObject.Instantiate(LightningAudioPrefab, Position, this.transform.rotation);
+        //https://freesound.org/people/fattirewhitey/sounds/523905/
+    }
+    List<Lightning> GetLightningLayer(Lightning l, int layers)
+    {
+        List<Lightning> ls = new List<Lightning>();
+        ls.Add(l);
+        if (layers == 0)
+        {
+            return ls;
+        }
+        Lightning A = new Lightning();
+        A.origin = l.origin + l.direction * l.length;
+        A.direction = l.direction + new float3(UnityEngine.Random.Range(0, 0.5f), 0, UnityEngine.Random.Range(-0.5f, 0.5f));
+        A.direction = Unity.Mathematics.math.normalize(A.direction);
+        A.length = l.length * UnityEngine.Random.Range(0.3f, 1f);
+        ls.AddRange(GetLightningLayer(A, layers - 1));
+
+        Lightning B = new Lightning();
+        B.origin = l.origin + l.direction * l.length;
+        B.direction = l.direction + new float3(UnityEngine.Random.Range(-0.5f, 0), 0, UnityEngine.Random.Range(-0.5f, 0.5f));
+        B.direction = Unity.Mathematics.math.normalize(B.direction);
+        B.length = l.length * UnityEngine.Random.Range(0.3f, 1f);
+        ls.AddRange(GetLightningLayer(B, layers - 1));
+        return ls;
     }
 }

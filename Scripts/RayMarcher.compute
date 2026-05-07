@@ -36,6 +36,16 @@ cbuffer _CloudSettings {
     float _pad3;
 };
 
+struct Lightning {
+    float3 origin;
+    float _pad0;
+    float3 direction;
+    float segmentLength;
+};
+
+StructuredBuffer<Lightning> Lightnings;
+uint _LightningCount;
+
 struct Ray {
     float3 origin;
     float3 direction;
@@ -47,6 +57,7 @@ static const float SHELL_INNER     = 6400*100;
 static const float SHELL_OUTER     = 6500*100;
 static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;
 static const float PLANET_THICKNESS = 6300*100; //630.000
+static const float LIGHTNING_MAX_DISTANCE = 200*100;
 
 //Currently unused
 float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
@@ -179,14 +190,37 @@ float HGPhase (float cos_angle , float inG) {
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
+float3 GetLightSourceDirection(float3 WorldPos) {
+    float3 bestDelta    = SunDirection; 
+    float  bestDistSq   = LIGHTNING_MAX_DISTANCE * LIGHTNING_MAX_DISTANCE;
+    bool   hitAny       = false;
+
+    for (uint i = 0; i < _LightningCount; i++) {
+        float3 LightningPos = Lightnings[i].origin*10;
+        LightningPos.y = WorldPos.y;
+        float3 toPos  = WorldPos - LightningPos;
+        float  t      = clamp(dot(toPos, Lightnings[i].direction), 0.0, Lightnings[i].segmentLength*10);
+        float3 closest = LightningPos+ Lightnings[i].direction * t;
+
+        float3 delta  = closest - WorldPos;
+        float  distSq = dot(delta, delta);
+
+        if (distSq < bestDistSq) {
+            bestDistSq = distSq;
+            bestDelta  = delta;
+            hitAny     = true;
+        }
+    }
+
+    return hitAny ? bestDelta : SunDirection;
+}
 //Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
     int numShadowSteps = 6;
-    float3 sunDir = normalize(SunDirection);
+    float VdotL = dot(viewDir,SunDirection);//TODO Atteniate based on how much of color is suncolor
 
     float betaE =  0.003;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
     float sigS_over_sigE = BrightnesMultiplier; //general energy multiplier
-    float VdotL = dot(viewDir,sunDir);
 
     float t = tMin;
     float transmittance = 1.0;
@@ -206,6 +240,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
     viewPos +=viewDir*rayOffset;
     float MipMap = SelectMipForWorldPos(viewPos);
+    float3 LightSourceColor = SunColor;
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
         float3 samplePos = viewPos +t*viewDir;
@@ -225,8 +260,20 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
             float3 samplePosShadow = samplePos;
             float prevShadowDensity = density;
+            float3 sunDir = GetLightSourceDirection(samplePos);
+            float LightIntensity = 1;
+            //Change color based on sun or lighning
+            if (sunDir.y != SunDirection.y) {
+                float NormalizedDistance = (1-(length(sunDir)/LIGHTNING_MAX_DISTANCE));
+                LightSourceColor += float3(0,0,1)* NormalizedDistance*NormalizedDistance*NormalizedDistance*1;
+                LightIntensity =3 *exp(-(1-NormalizedDistance) * 30.0) * 50.0;
+                sunDir = normalize(sunDir);
+                ShadowStepSize = 80;
+            }else {
+                LightSourceColor += SunColor;
+                ShadowStepSize = 800;
+            }
             for(int i=0;i<numShadowSteps;++i) {
-                //TODO replace by pre-caclced values
                 samplePosShadow += ShadowStepSize*sunDir;
                 float shadowDensity = GetCloudDensity(samplePosShadow,MipMap)*TransmittanceFalloff;
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
@@ -240,8 +287,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             float _dTr = transmittance-nextTransmittance;
 
             //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-            sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation 
-            sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+            sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr*LightIntensity; //Two Octaves of sunshine, doom innovation 
+            sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder,PowderStrength)*sqrt(shadowTransmittance)*_dTr*LightIntensity; //Lerp powder, because lowkey cringe for dark borders around cloud
 
             ambientInScatterN += sigS_over_sigE *powder*_dTr;
             distSum +=t*_dTr;
@@ -279,14 +326,14 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float avgCloudDist = distSum /(1.0-transmittance);
     if(transmittance<1) {
-    depth= avgCloudDist; 
+        depth= avgCloudDist;
     }else {
         depth =length(viewPos +tMax*viewDir); // Fallback for cirrus
     }
 
     float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
 
-    float3 sunIrradiance = SunColor*SunIntensity; 
+    float3 sunIrradiance = normalize(LightSourceColor)*SunIntensity; 
     float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance+ambientInScatterN*ambientIrradiance;
     return float4(inScatter,1-transmittance);
 }

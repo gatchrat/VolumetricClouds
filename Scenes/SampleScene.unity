@@ -542,7 +542,7 @@ MonoBehaviour:
   CloudDensity: 0.55
   StepCount: 4
   BrightnesMultiplier: 2.5
-  TransmittanceFalloff: 0.3
+  TransmittanceFalloff: 2
   PowderEffect: 0.35
   BeersEffect: 100
   SunBlindingEffectStrengh: 0.2
@@ -554,6 +554,7 @@ MonoBehaviour:
     z: 0
   CloudsBounds: {fileID: 764791172}
   Sun: {fileID: 410087041}
+  LightningAudioPrefab: {fileID: 0}
 --- !u!1 &764791168
 GameObject:
   m_ObjectHideFlags: 0

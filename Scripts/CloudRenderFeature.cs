@@ -25,6 +25,7 @@ public class CloudRendererFeature : ScriptableRendererFeature
 
         _pass.ShapeRenderTexture = Manager.ShapeRenderTexture;
         _pass.UpdateSettings(Manager.cloudSettings);
+        _pass.UpdateLightning(Manager.Lightnings);
         _pass.BlueNoiseTexture = Manager.BlueNoise;
         _pass.DetailRenderTexture = Manager.DetailRenderTexture;
         _pass.CurFrameMovement = Manager.GetMovementOffset();

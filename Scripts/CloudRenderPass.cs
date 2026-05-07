@@ -3,12 +3,14 @@ using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering.RenderGraphModule;
 using Unity.Mathematics;
+using System.Collections.Generic;
 
 public class CloudRenderPass : ScriptableRenderPass
 {
     private ComputeShader _shader;
     private ComputeShader UpscaleShader;
     private ComputeShader MergeShader;
+    public int lightningCount;
     public Bounds Bounds;
     public float3 CurFrameMovement;
     private int _raymarchKernel;
@@ -86,6 +88,21 @@ public class CloudRenderPass : ScriptableRenderPass
     }
 
     private ComputeBuffer _settingsBuffer;
+    private GraphicsBuffer _LightningBuffer;
+
+    public void UpdateLightning(List<Lightning> Lightnings)
+    {
+        if (lightningCount != Lightnings.Count)
+        {
+            _LightningBuffer = new GraphicsBuffer(
+            GraphicsBuffer.Target.Structured,
+            Lightnings.Count,
+            System.Runtime.InteropServices.Marshal.SizeOf<Lightning>());
+            lightningCount = Lightnings.Count;
+
+        }
+        _LightningBuffer.SetData(Lightnings);
+    }
 
     public void UpdateSettings(CloudSettings settings)
     {
@@ -128,6 +145,7 @@ public class CloudRenderPass : ScriptableRenderPass
         public TextureHandle blueNoiseHandle;
         public Vector3 SunPos;
         public ComputeBuffer settingsBuffer;
+        public GraphicsBuffer lightningBuffer;
         public int fullWidth;
         public int fullHeight;
         public int quarterWidth;
@@ -179,6 +197,7 @@ public class CloudRenderPass : ScriptableRenderPass
             data.src = resourceData.activeColorTexture;
             data.dst = dst;
             data.settingsBuffer = _settingsBuffer;
+            data.lightningBuffer = _LightningBuffer;
             data.fullWidth = fullWidth;
             data.fullHeight = fullHeight;
             data.quarterWidth = qWidth;
@@ -236,6 +255,9 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudDepthTex", d.quarterDepthBuffer);
                 cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings", d.settingsBuffer, 0, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
+                cmd.SetComputeBufferParam(d.shader, d.raymarchKernel, "Lightnings", d.lightningBuffer);
+                cmd.SetComputeIntParam(d.shader, "_LightningCount", lightningCount);
+
 
                 int qGroupsX = Mathf.CeilToInt(d.quarterWidth / 8f);
                 int qGroupsY = Mathf.CeilToInt(d.quarterHeight / 8f);
@@ -296,6 +318,7 @@ public class CloudRenderPass : ScriptableRenderPass
         foreach (var b in _fullCloudBuffers) b?.Release();
         _blueNoiseHandle?.Release();
         _settingsBuffer?.Release();
+        _LightningBuffer?.Release();
         DetailRenderTexture?.Release();
         ShapeRenderTexture?.Release();
         _quarterDepthHandle?.Release();
