@@ -112,7 +112,7 @@ float2 IntersectCloudShell(Ray ray) {
 bool isInShell(float3 Worldpos) {
     float dist = length(Worldpos);
     if(dist>= SHELL_INNER && dist <= SHELL_OUTER) {
-        if(Worldpos.y > 0) {
+        if(Worldpos.y > -100) {
             return true;
         }
     }
