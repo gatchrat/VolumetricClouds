@@ -41,6 +41,26 @@ public struct CloudSettings
 
 public class CloudManager : MonoBehaviour
 {
+    [Header("Settings (Use Light settings color and intensity)")]
+    [Range(1f, 10f)]
+    public float BrightnesMultiplier = 1f;
+    [Range(0.1f, 20f)]
+    public float CloudSunBlocking = 1f;
+    [Range(0f, 1)]
+    public float DarkOutline = 0.35f;
+    [Range(0f, 5)]
+    public float AmbiantLight = 100f;
+    [Range(500f, 10000f)]
+    public float CloudThickness;
+    [Range(0f, 1f)]
+    public float CloudDensity = 0.55f;
+    public bool Lightning = false;
+    [Range(0f, 1f)]
+    public float SunBlindingEffectStrengh = 1f;
+    [Range(0f, 10f)]
+    public float CloudMovementSpeed = 1f;
+    public Vector3 Scale = new Vector3(1, 1, 1);
+    [Header("Technical Stuff")]
     public int seed = 42;
     public int ShapeTextureSize = 128;
     public RenderTexture ShapeRenderTexture;
@@ -50,37 +70,14 @@ public class CloudManager : MonoBehaviour
     public int[] DetailWosleyCellCount = new int[] { 16, 24, 32 };
     public float[] fBmWeights = new float[] { 1, 0.5f, 0.2f };
     public ComputeShader WorleyComputer;
-    [Range(0f, 1f)]
-    public float CloudDensity = 0.55f; //Used in Renderpass
-    public int StepCount = 4;
-    [Range(1f, 10f)]
-    public float BrightnesMultiplier = 1f;
-    [Range(0.1f, 20f)]
-    public float TransmittanceFalloff = 1f;
-    [Range(0f, 1)]
-    public float PowderEffect = 0.35f;
-    [Range(0f, 5)]
-    public float AmbiantLight = 100f;
-    [Range(500f, 10000f)]
-    public float CloudThickness;
-    private float CLOUD_BOTTOM = 500f;
-    public bool Lightning = false;
-    [Range(0f, 1f)]
-    public float SunBlindingEffectStrengh = 1f;
-    [Range(0f, 10f)]
-    public float CloudMovementSpeed = 1f;
-    public Vector3 Scale = new Vector3(1, 1, 1);
-    public float3 Offset;
+    private float CLOUD_BOTTOM = 500f; public float3 Offset;
     public Transform CloudsBounds;
     public Transform Sun;
     private Light SunLight;
-
     public List<Lightning> Lightnings;
 
     public CloudSettings cloudSettings;
-
     private float3 CurFrameMovement;
-
     private float LightningTimer = 3f;
     private int curLightningLayer = 0;
     private float flickerTimer = 0.1f;
@@ -91,8 +88,8 @@ public class CloudManager : MonoBehaviour
     void Update()
     {
         cloudSettings.BrightnesMultiplier = BrightnesMultiplier;
-        cloudSettings.TransmittanceFalloff = TransmittanceFalloff;
-        cloudSettings.PowderStrength = PowderEffect;
+        cloudSettings.TransmittanceFalloff = CloudSunBlocking;
+        cloudSettings.PowderStrength = DarkOutline;
         cloudSettings.AmbiantLight = AmbiantLight;
         cloudSettings.SunBlindingEffectSize = SunBlindingEffectStrengh;
         cloudSettings.Scale = Scale;

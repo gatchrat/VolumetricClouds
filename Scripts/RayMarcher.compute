@@ -147,7 +147,7 @@ float GetCloudDensity(float3 WorldPos, float MipMap) {
     float Adjusted_Top = CLOUD_TOP;
 
     float ShapeTiling = 0.00001;
-    float3 ShapeNoisePos = WorldPos*ShapeTiling;// From 1 = 1/1000 to 1000 = 1
+    float3 ShapeNoisePos = WorldPos*ShapeTiling*Scale;// From 1 = 1/1000 to 1000 = 1
     ShapeNoisePos += Offset;
     float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos,MipMap).xy;
     float ShapeWorley = ShapeNoise.x;

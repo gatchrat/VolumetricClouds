@@ -479,13 +479,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 410087039}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.19886133, y: -0.27918124, z: 0.06879253, w: 0.93689895}
+  m_LocalRotation: {x: -0.062891506, y: 0.9193557, z: -0.20080563, w: -0.33242574}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 24.27, y: -32.945, z: 1.123}
+  m_LocalEulerAnglesHint: {x: 24.27, y: 220, z: 1.123}
 --- !u!114 &410087042
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -527,6 +527,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0cfc2546a0001f6409122248f791820c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CloudManager
+  BrightnesMultiplier: 2.5
+  CloudSunBlocking: 1
+  DarkOutline: 0.35
+  AmbiantLight: 1
+  CloudThickness: 4000
+  CloudDensity: 0.55
+  Lightning: 0
+  SunBlindingEffectStrengh: 0.2
+  CloudMovementSpeed: 1.9
+  Scale: {x: 1, y: 1, z: 1}
   seed: 22
   ShapeTextureSize: 128
   ShapeRenderTexture: {fileID: 0}
@@ -539,17 +549,6 @@ MonoBehaviour:
   - 0.25
   - 0.125
   WorleyComputer: {fileID: 7200000, guid: ec046f9d622fcb643b00d41a6733fe26, type: 3}
-  CloudDensity: 0.55
-  StepCount: 4
-  BrightnesMultiplier: 2.5
-  TransmittanceFalloff: 2
-  PowderEffect: 0.35
-  AmbiantLight: 1
-  CloudThickness: 4000
-  Lightning: 0
-  SunBlindingEffectStrengh: 0.2
-  CloudMovementSpeed: 1.9
-  Scale: {x: 6, y: 0.1, z: 6}
   Offset:
     x: 0
     y: 0
