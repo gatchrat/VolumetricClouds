@@ -60,6 +60,7 @@ public class CloudManager : MonoBehaviour
     public float PowderEffect = 0.35f;
     [Range(0f, 100f)]
     public float BeersEffect = 100f;
+    public bool Lightning = false;
     [Range(0f, 1f)]
     public float SunBlindingEffectStrengh = 1f;
     [Range(0f, 10f)]
@@ -99,8 +100,10 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunColor = new Vector3(SunLight.color.r, SunLight.color.g, SunLight.color.b);
         cloudSettings.SunIntensity = SunLight.intensity;
 
-
-        handleLightning();
+        if (Lightning)
+        {
+            handleLightning();
+        }
 
     }
     private void handleLightning()
