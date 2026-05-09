@@ -26,14 +26,15 @@ cbuffer _CloudSettings {
     float BrightnesMultiplier;
     float TransmittanceFalloff;
     float PowderStrength;
-    float BeersEffect;
+    float AmbiantLight;
     float SunBlindingEffectSize;
     float _pad4;
     float _pad5;
     float3 SunColor;
     float SunIntensity;
     float3 SunDirection;
-    float _pad3;
+    float CLOUD_TOP;
+    float CLOUD_BOTTOM;
 };
 
 struct Lightning {
@@ -50,8 +51,6 @@ struct Ray {
     float3 origin;
     float3 direction;
 };
-static  float CLOUD_TOP = 4000.0;
-static  float  CLOUD_BOTTOM = 500.0;
 
 static const float SHELL_INNER     = 6400*100;
 static const float SHELL_OUTER     = 6500*100;
@@ -343,7 +342,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         depth =length(viewPos +tMax*viewDir); // Fallback for cirrus
     }
 
-    float3 ambientIrradiance = float3(0.55, 0.65, 0.85); 
+    float3 ambientIrradiance = float3(0.55, 0.65, 0.85)*AmbiantLight; 
 
     float3 sunIrradiance = normalize(SunColor)*SunIntensity; 
     float LightningMultiplier = 0;

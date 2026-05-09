@@ -544,7 +544,9 @@ MonoBehaviour:
   BrightnesMultiplier: 2.5
   TransmittanceFalloff: 2
   PowderEffect: 0.35
-  BeersEffect: 100
+  AmbiantLight: 1
+  CloudThickness: 4000
+  Lightning: 0
   SunBlindingEffectStrengh: 0.2
   CloudMovementSpeed: 1.9
   Scale: {x: 6, y: 0.1, z: 6}

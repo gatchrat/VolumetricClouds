@@ -27,14 +27,15 @@ public struct CloudSettings
     public float BrightnesMultiplier;
     public float TransmittanceFalloff;
     public float PowderStrength;
-    public float BeersEffect;
+    public float AmbiantLight;
     public float SunBlindingEffectSize;
     public float _pad4;
     public float _pad5;
     public float3 SunColor;
     public float SunIntensity;
     public float3 SunDirection;
-    public float _pad3;
+    public float CLOUD_TOP;
+    public float CLOUD_BOTTOM;
 
 }
 
@@ -58,8 +59,11 @@ public class CloudManager : MonoBehaviour
     public float TransmittanceFalloff = 1f;
     [Range(0f, 1)]
     public float PowderEffect = 0.35f;
-    [Range(0f, 100f)]
-    public float BeersEffect = 100f;
+    [Range(0f, 5)]
+    public float AmbiantLight = 100f;
+    [Range(500f, 10000f)]
+    public float CloudThickness;
+    private float CLOUD_BOTTOM = 500f;
     public bool Lightning = false;
     [Range(0f, 1f)]
     public float SunBlindingEffectStrengh = 1f;
@@ -89,7 +93,7 @@ public class CloudManager : MonoBehaviour
         cloudSettings.BrightnesMultiplier = BrightnesMultiplier;
         cloudSettings.TransmittanceFalloff = TransmittanceFalloff;
         cloudSettings.PowderStrength = PowderEffect;
-        cloudSettings.BeersEffect = BeersEffect;
+        cloudSettings.AmbiantLight = AmbiantLight;
         cloudSettings.SunBlindingEffectSize = SunBlindingEffectStrengh;
         cloudSettings.Scale = Scale;
         cloudSettings.CloudDensity = CloudDensity;
@@ -99,6 +103,8 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunDirection = Sun.transform.forward * -1;
         cloudSettings.SunColor = new Vector3(SunLight.color.r, SunLight.color.g, SunLight.color.b);
         cloudSettings.SunIntensity = SunLight.intensity;
+        cloudSettings.CLOUD_TOP = CloudThickness;
+        cloudSettings.CLOUD_BOTTOM = CLOUD_BOTTOM;
 
         if (Lightning)
         {
