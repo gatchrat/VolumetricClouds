@@ -4,6 +4,7 @@ using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering.RenderGraphModule;
 using Unity.Mathematics;
 using System.Collections.Generic;
+using UnityEngine.Experimental.Rendering;
 
 public class CloudRenderPass : ScriptableRenderPass
 {
@@ -21,22 +22,26 @@ public class CloudRenderPass : ScriptableRenderPass
     public Texture2D BlueNoiseTexture;
     private CloudSettings _lastSettings;
 
-    // Quarter resolution - raymarch target
-    private RenderTexture _quarterCloudBuffer;
-    private RTHandle _quarterCloudHandle;
+    private RenderTexture[] _quarterCloudBuffers = new RenderTexture[2];
+    private RTHandle[] _quarterCloudHandles = new RTHandle[2];
 
-    // Full resolution - upscale target
-    private RenderTexture[] _fullCloudBuffers = new RenderTexture[2];
-    private RTHandle[] _fullCloudHandles = new RTHandle[2];
-    private int _currentBuffer = 0;
-    private Matrix4x4 _prevViewProj;
-    private RenderTexture _quarterDepthBuffer;
-    private RTHandle _quarterDepthHandle;
+    // Full resolution - upscale target (2 ping-pong buffers per eye = 4 total)
+    // Index: eye * 2 + pingPong  (eye 0=left, 1=right)
+    private RenderTexture[] _fullCloudBuffers = new RenderTexture[4];
+    private RTHandle[] _fullCloudHandles = new RTHandle[4];
+    private int[] _currentBuffer = new int[2] { 0, 0 }; // per-eye ping-pong index
 
+    // Per-eye previous VP matrix for TAA reprojection
+    private Matrix4x4[] _prevViewProj = new Matrix4x4[2];
+
+    private RenderTexture[] _quarterDepthBuffers = new RenderTexture[2];
+    private RTHandle[] _quarterDepthHandles = new RTHandle[2];
 
     private RTHandle _blueNoiseHandle;
 
-    private void EnsureBuffers(int fullWidth, int fullHeight)
+    private static readonly int _flipY = SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
+
+    private void EnsureBuffers(int fullWidth, int fullHeight, int eyeCount)
     {
         if (_blueNoiseHandle == null)
             _blueNoiseHandle = RTHandles.Alloc(BlueNoiseTexture);
@@ -44,46 +49,54 @@ public class CloudRenderPass : ScriptableRenderPass
         int qWidth = Mathf.CeilToInt(fullWidth / 4f);
         int qHeight = Mathf.CeilToInt(fullHeight / 4f);
 
-        // Quarter res buffer
-        if (_quarterCloudBuffer == null ||
-            _quarterCloudBuffer.width != qWidth ||
-            _quarterCloudBuffer.height != qHeight)
+        for (int eye = 0; eye < eyeCount; eye++)
         {
-            _quarterCloudBuffer?.Release();
-            _quarterCloudHandle?.Release();
-
-            _quarterCloudBuffer = new RenderTexture(qWidth, qHeight, 0, RenderTextureFormat.ARGBFloat);
-            _quarterCloudBuffer.enableRandomWrite = true;
-            _quarterCloudBuffer.Create();
-            _quarterCloudHandle = RTHandles.Alloc(_quarterCloudBuffer);
-        }
-
-        // Full res buffer
-        for (int i = 0; i < 2; i++)
-        {
-            if (_fullCloudBuffers[i] == null ||
-                _fullCloudBuffers[i].width != fullWidth)
+            // Quarter res cloud buffer per eye
+            if (_quarterCloudBuffers[eye] == null ||
+                _quarterCloudBuffers[eye].width != qWidth ||
+                _quarterCloudBuffers[eye].height != qHeight)
             {
-                _fullCloudBuffers[i]?.Release();
-                _fullCloudHandles[i]?.Release();
-                _fullCloudBuffers[i] = new RenderTexture(fullWidth, fullHeight, 0,
-                                                          RenderTextureFormat.ARGBFloat);
-                _fullCloudBuffers[i].enableRandomWrite = true;
-                _fullCloudBuffers[i].Create();
-                _fullCloudHandles[i] = RTHandles.Alloc(_fullCloudBuffers[i]);
-            }
-        }
-        if (_quarterDepthBuffer == null ||
-            _quarterDepthBuffer.width != qWidth ||
-            _quarterDepthBuffer.height != qHeight)
-        {
-            _quarterDepthBuffer?.Release();
-            _quarterDepthHandle?.Release();
+                _quarterCloudBuffers[eye]?.Release();
+                _quarterCloudHandles[eye]?.Release();
 
-            _quarterDepthBuffer = new RenderTexture(qWidth, qHeight, 0, RenderTextureFormat.RFloat);
-            _quarterDepthBuffer.enableRandomWrite = true;
-            _quarterDepthBuffer.Create();
-            _quarterDepthHandle = RTHandles.Alloc(_quarterDepthBuffer);
+                _quarterCloudBuffers[eye] = new RenderTexture(qWidth, qHeight, 0, RenderTextureFormat.ARGBHalf);
+                _quarterCloudBuffers[eye].enableRandomWrite = true;
+                _quarterCloudBuffers[eye].Create();
+                _quarterCloudHandles[eye] = RTHandles.Alloc(_quarterCloudBuffers[eye]);
+            }
+
+            // Quarter res depth buffer per eye
+            if (_quarterDepthBuffers[eye] == null ||
+                _quarterDepthBuffers[eye].width != qWidth ||
+                _quarterDepthBuffers[eye].height != qHeight)
+            {
+                _quarterDepthBuffers[eye]?.Release();
+                _quarterDepthHandles[eye]?.Release();
+
+                _quarterDepthBuffers[eye] = new RenderTexture(qWidth, qHeight, 0, RenderTextureFormat.RHalf);
+                _quarterDepthBuffers[eye].enableRandomWrite = true;
+                _quarterDepthBuffers[eye].Create();
+                _quarterDepthHandles[eye] = RTHandles.Alloc(_quarterDepthBuffers[eye]);
+            }
+
+            // Full res ping-pong buffers per eye (indices eye*2 and eye*2+1)
+            for (int p = 0; p < 2; p++)
+            {
+                int idx = eye * 2 + p;
+                if (_fullCloudBuffers[idx] == null ||
+                    _fullCloudBuffers[idx].width != fullWidth ||
+                    _fullCloudBuffers[idx].height != fullHeight)
+                {
+                    _fullCloudBuffers[idx]?.Release();
+                    _fullCloudHandles[idx]?.Release();
+
+                    _fullCloudBuffers[idx] = new RenderTexture(fullWidth, fullHeight, 0,
+                                                               RenderTextureFormat.ARGBHalf);
+                    _fullCloudBuffers[idx].enableRandomWrite = true;
+                    _fullCloudBuffers[idx].Create();
+                    _fullCloudHandles[idx] = RTHandles.Alloc(_fullCloudBuffers[idx]);
+                }
+            }
         }
     }
 
@@ -95,11 +108,10 @@ public class CloudRenderPass : ScriptableRenderPass
         if (lightningCount != Lightnings.Count)
         {
             _LightningBuffer = new GraphicsBuffer(
-            GraphicsBuffer.Target.Structured,
-            Lightnings.Count,
-            System.Runtime.InteropServices.Marshal.SizeOf<Lightning>());
+                GraphicsBuffer.Target.Structured,
+                Lightnings.Count,
+                System.Runtime.InteropServices.Marshal.SizeOf<Lightning>());
             lightningCount = Lightnings.Count;
-
         }
         _LightningBuffer.SetData(Lightnings);
     }
@@ -124,14 +136,13 @@ public class CloudRenderPass : ScriptableRenderPass
         _raymarchKernel = shader.FindKernel("CloudRaymarch");
         _upscaleKernel = upscaleShader.FindKernel("TemporalUpscaling");
         _mergeKernel = mergeShader.FindKernel("Merge");
-        renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
+        renderPassEvent = RenderPassEvent.AfterRenderingSkybox;
     }
 
     private class PassData
     {
         public ComputeShader shader;
         public ComputeShader upscaleShader;
-        public TextureHandle quarterDepthBuffer;
         public ComputeShader mergeShader;
         public int raymarchKernel;
         public int upscaleKernel;
@@ -141,6 +152,7 @@ public class CloudRenderPass : ScriptableRenderPass
         public TextureHandle src;
         public TextureHandle dst;
         public TextureHandle quarterCloudBuffer;
+        public TextureHandle quarterDepthBuffer;
         public TextureHandle depthBuffer;
         public TextureHandle blueNoiseHandle;
         public Vector3 SunPos;
@@ -150,15 +162,19 @@ public class CloudRenderPass : ScriptableRenderPass
         public int fullHeight;
         public int quarterWidth;
         public int quarterHeight;
-        public TextureHandle historyBuffer;     // previous frame - read
-        public TextureHandle fullCloudBuffer;   // current frame  - write
+        public TextureHandle historyBuffer;
+        public TextureHandle fullCloudBuffer;
         public Matrix4x4 prevViewProj;
-        public Vector2 quarterResolution;
-        public Vector2 fullResolution;
-        public Matrix4x4 currInvViewProj;
         public Matrix4x4 currViewProj;
+        public Matrix4x4 currInvViewProj;
+        // Per-eye camera matrices (already GPU-corrected)
+        public Matrix4x4 cameraToWorld;
+        public Matrix4x4 cameraInverseProjection;
         public Vector3 cameraPos;
         public Vector3 CurFrameMovement;
+        // XR / platform
+        public int eyeIndex;   // 0 = left, 1 = right
+        public int flipY;      // 1 on Vulkan/Metal, 0 on OpenGL
     }
 
     public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
@@ -171,17 +187,87 @@ public class CloudRenderPass : ScriptableRenderPass
 
         if (cameraData.camera.cameraType != CameraType.Game) return;
 
-        int fullWidth = cameraData.camera.pixelWidth;
-        int fullHeight = cameraData.camera.pixelHeight;
+        // ── XR multipass: which eye are we rendering? ─────────────────────────
+        bool isXR = cameraData.xr.enabled;
+        int eyeIndex = isXR ? cameraData.xr.multipassId : 0;
+        int eyeCount = isXR ? 2 : 1;
+
+        Camera.StereoscopicEye stereoEye = eyeIndex == 0
+            ? Camera.StereoscopicEye.Left
+            : Camera.StereoscopicEye.Right;
+
+        var cam = cameraData.camera;
+
+        // ── Per-eye view & projection matrices ────────────────────────────────
+        // Always use stereo matrices when XR is active so each eye gets its
+        // own IPD offset and lens projection. Fall back to mono when not in XR.
+        Matrix4x4 viewMatrix = isXR
+            ? cam.GetStereoViewMatrix(stereoEye)
+            : cam.worldToCameraMatrix;
+
+        Matrix4x4 projMatrix = isXR
+            ? cam.GetStereoProjectionMatrix(stereoEye)
+            : cam.projectionMatrix;
+
+        // GetGPUProjectionMatrix flips Y on Vulkan/Metal when rendering into a
+        // texture (renderIntoTexture = true), so the VP we build here is correct
+        // for sampling depth and writing to our RenderTextures on Quest.
+        Matrix4x4 gpuProj = GL.GetGPUProjectionMatrix(projMatrix, true);
+        Matrix4x4 currVP = gpuProj * viewMatrix;
+        Matrix4x4 invVP = currVP.inverse;
+
+        // _CameraInverseProjection for ray-direction reconstruction in the
+        // raymarch shader must also use the GPU projection matrix so ray
+        // directions are consistent with the depth buffer on Vulkan.
+        Matrix4x4 invGpuProj = gpuProj.inverse;
+        // cameraToWorldMatrix is the inverse of the view matrix.
+        Matrix4x4 camToWorld = viewMatrix.inverse;
+
+        int fullWidth = cameraData.cameraTargetDescriptor.width;
+        int fullHeight = cameraData.cameraTargetDescriptor.height;
         int qWidth = Mathf.CeilToInt(fullWidth / 4f);
         int qHeight = Mathf.CeilToInt(fullHeight / 4f);
 
-        EnsureBuffers(fullWidth, fullHeight);
+        EnsureBuffers(fullWidth, fullHeight, eyeCount);
 
-        var desc = renderGraph.GetTextureDesc(resourceData.activeColorTexture);
-        desc.enableRandomWrite = true;
-        desc.name = "CloudOutput";
+        TextureDesc desc = new TextureDesc(fullWidth, fullHeight)
+        {
+            colorFormat = GraphicsFormat.R16G16B16A16_SFloat,
+            enableRandomWrite = true,
+            name = "CloudOutput",
+            clearBuffer = false
+        };
         TextureHandle dst = renderGraph.CreateTexture(desc);
+
+        TextureDesc copyDesc = new TextureDesc(fullWidth, fullHeight)
+        {
+            colorFormat = GraphicsFormat.R16G16B16A16_SFloat,
+            enableRandomWrite = false,
+            name = "CameraColorCopy"
+        };
+
+        TextureHandle cameraCopy = renderGraph.CreateTexture(copyDesc);
+        using (var builder = renderGraph.AddRasterRenderPass<PassData>("Copy Camera Color", out var d))
+        {
+            d.src = resourceData.cameraColor;
+            d.dst = cameraCopy;
+
+            builder.UseTexture(d.src);
+            builder.SetRenderAttachment(d.dst, 0);
+
+            builder.SetRenderFunc((PassData data, RasterGraphContext ctx) =>
+            {
+                Blitter.BlitTexture(ctx.cmd, data.src, new Vector4(1, 1, 0, 0), 0, false);
+            });
+        }
+
+        // ── Per-eye ping-pong buffer selection ────────────────────────────────
+        int prevPing = _currentBuffer[eyeIndex];
+        int currPing = 1 - prevPing;
+        _currentBuffer[eyeIndex] = currPing;
+
+        int prevBufIdx = eyeIndex * 2 + prevPing;
+        int currBufIdx = eyeIndex * 2 + currPing;
 
         using (var builder = renderGraph.AddComputePass<PassData>("Cloud Raymarch + Upscale", out var data))
         {
@@ -193,8 +279,9 @@ public class CloudRenderPass : ScriptableRenderPass
             data.mergeKernel = _mergeKernel;
             data.bounds = Bounds;
             data.CurFrameMovement = CurFrameMovement;
-            data.camera = cameraData.camera;
-            data.src = resourceData.activeColorTexture;
+            data.camera = cam;
+
+            data.src = cameraCopy;
             data.dst = dst;
             data.settingsBuffer = _settingsBuffer;
             data.lightningBuffer = _LightningBuffer;
@@ -202,47 +289,46 @@ public class CloudRenderPass : ScriptableRenderPass
             data.fullHeight = fullHeight;
             data.quarterWidth = qWidth;
             data.quarterHeight = qHeight;
-            data.cameraPos = cameraData.camera.transform.position;
-            Matrix4x4 gpuProj = GL.GetGPUProjectionMatrix(cameraData.camera.projectionMatrix, true);
-            Matrix4x4 currVP = gpuProj * cameraData.camera.worldToCameraMatrix;
-            data.prevViewProj = _prevViewProj;
+            data.cameraPos = cam.transform.position;
+
+            // Corrected per-eye matrices
+            data.cameraToWorld = camToWorld;
+            data.cameraInverseProjection = invGpuProj;
+            data.prevViewProj = _prevViewProj[eyeIndex];
             data.currViewProj = currVP;
-            data.currInvViewProj = currVP.inverse;
-            data.cameraPos = cameraData.camera.transform.position;
+            data.currInvViewProj = invVP;
+
+            // XR / Vulkan
+            data.eyeIndex = eyeIndex;
+            data.flipY = _flipY;
 
             data.blueNoiseHandle = renderGraph.ImportTexture(_blueNoiseHandle);
-            data.quarterCloudBuffer = renderGraph.ImportTexture(_quarterCloudHandle);
+            data.quarterCloudBuffer = renderGraph.ImportTexture(_quarterCloudHandles[eyeIndex]);
+            data.quarterDepthBuffer = renderGraph.ImportTexture(_quarterDepthHandles[eyeIndex]);
             data.depthBuffer = resourceData.cameraDepthTexture;
+            data.historyBuffer = renderGraph.ImportTexture(_fullCloudHandles[prevBufIdx]);
+            data.fullCloudBuffer = renderGraph.ImportTexture(_fullCloudHandles[currBufIdx]);
 
             builder.UseTexture(data.blueNoiseHandle);
-            builder.UseTexture(data.src);
+            builder.AllowPassCulling(false);
+            builder.UseTexture(data.src, AccessFlags.Read);
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
             builder.UseTexture(data.depthBuffer);
             builder.UseTexture(data.quarterCloudBuffer, AccessFlags.ReadWrite);
-
-            data.quarterDepthBuffer = renderGraph.ImportTexture(_quarterDepthHandle);
             builder.UseTexture(data.quarterDepthBuffer, AccessFlags.ReadWrite);
-            int prevBuffer = _currentBuffer;
-            int currentBuffer = 1 - _currentBuffer;
-            _currentBuffer = currentBuffer;    // flip for next frame
-
-            data.historyBuffer = renderGraph.ImportTexture(_fullCloudHandles[prevBuffer]);
-            data.fullCloudBuffer = renderGraph.ImportTexture(_fullCloudHandles[currentBuffer]);
-            data.prevViewProj = _prevViewProj;
-            data.quarterResolution = new Vector2(qWidth, qHeight);
-            data.fullResolution = new Vector2(fullWidth, fullHeight);
-
-            builder.UseTexture(data.historyBuffer);                          // read
-            builder.UseTexture(data.fullCloudBuffer, AccessFlags.WriteAll);  // write
+            builder.UseTexture(data.historyBuffer);
+            builder.UseTexture(data.fullCloudBuffer, AccessFlags.WriteAll);
 
             builder.SetRenderFunc((PassData d, ComputeGraphContext ctx) =>
             {
                 var cmd = ctx.cmd;
-                var cam = d.camera;
 
-                ////////////////////////////RAYMARCHING//////////////////////////////////
-                cmd.SetComputeMatrixParam(d.shader, "_CameraToWorld", cam.cameraToWorldMatrix);
-                cmd.SetComputeMatrixParam(d.shader, "_CameraInverseProjection", cam.projectionMatrix.inverse);
+                // ── RAYMARCHING ────────────────────────────────────────────────
+                // Corrected camera matrices - GPU proj-aware, per-eye
+                cmd.SetComputeMatrixParam(d.shader, "_CameraToWorld", d.cameraToWorld);
+                cmd.SetComputeMatrixParam(d.shader, "_CameraInverseProjection", d.cameraInverseProjection);
+                cmd.SetComputeIntParam(d.shader, "_FlipY", d.flipY);
+                cmd.SetComputeIntParam(d.shader, "_EyeIndex", d.eyeIndex);
                 cmd.SetComputeIntParam(d.shader, "_FrameIndex", Time.frameCount);
                 cmd.SetComputeVectorParam(d.shader, "_Resolution", new Vector2(d.quarterWidth, d.quarterHeight));
                 cmd.SetComputeVectorParam(d.shader, "_FullResolution", new Vector2(d.fullWidth, d.fullHeight));
@@ -254,10 +340,10 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "BlueNoise", d.blueNoiseHandle);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudDepthTex", d.quarterDepthBuffer);
-                cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings", d.settingsBuffer, 0, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
+                cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings", d.settingsBuffer,
+                    0, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
                 cmd.SetComputeBufferParam(d.shader, d.raymarchKernel, "Lightnings", d.lightningBuffer);
                 cmd.SetComputeIntParam(d.shader, "_LightningCount", lightningCount);
-
 
                 int qGroupsX = Mathf.CeilToInt(d.quarterWidth / 8f);
                 int qGroupsY = Mathf.CeilToInt(d.quarterHeight / 8f);
@@ -267,23 +353,24 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeMatrixParam(d.upscaleShader, "_CurrInvViewProj", d.currInvViewProj);
                 cmd.SetComputeMatrixParam(d.upscaleShader, "_CurrViewProj", d.currViewProj);
                 cmd.SetComputeMatrixParam(d.upscaleShader, "_PrevViewProj", d.prevViewProj);
-                cmd.SetComputeVectorParam(d.upscaleShader, "_QuarterResolution", d.quarterResolution);
-                cmd.SetComputeVectorParam(d.upscaleShader, "_Resolution", d.fullResolution);
-                cmd.SetComputeVectorParam(d.upscaleShader, "_FullResolution", d.fullResolution);
+                cmd.SetComputeIntParam(d.upscaleShader, "_FrameIndex", Time.frameCount);
+                cmd.SetComputeVectorParam(d.upscaleShader, "_QuarterResolution", new Vector2(d.quarterWidth, d.quarterHeight));
+                cmd.SetComputeVectorParam(d.upscaleShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
+                cmd.SetComputeVectorParam(d.upscaleShader, "_FullResolution", new Vector2(d.fullWidth, d.fullHeight));
+                cmd.SetComputeVectorParam(d.upscaleShader, "_CameraPos", d.cameraPos);
+                cmd.SetComputeVectorParam(d.upscaleShader, "MovementOffset", d.CurFrameMovement);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_HistoryBuffer", d.historyBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudBuffer", d.fullCloudBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudBuffer", d.quarterCloudBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudDepthTex", d.quarterDepthBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_DepthTex", d.depthBuffer);
-                cmd.SetComputeVectorParam(d.upscaleShader, "_CameraPos", d.cameraPos);
-                cmd.SetComputeIntParam(d.upscaleShader, "_FrameIndex", Time.frameCount);
-                cmd.SetComputeVectorParam(d.upscaleShader, "MovementOffset", d.CurFrameMovement);
 
                 int groupsX = Mathf.CeilToInt(d.fullWidth / 8f);
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
                 cmd.DispatchCompute(d.upscaleShader, d.upscaleKernel, groupsX, groupsY, 1);
 
                 /////////////////////////////////////MERGE//////////////////////////////////////////////
+                cmd.SetComputeIntParam(d.mergeShader, "_FlipY", d.flipY);
                 cmd.SetComputeVectorParam(d.mergeShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudBuffer", d.fullCloudBuffer);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_DepthTex", d.depthBuffer);
@@ -292,13 +379,13 @@ public class CloudRenderPass : ScriptableRenderPass
 
                 cmd.DispatchCompute(d.mergeShader, d.mergeKernel, groupsX, groupsY, 1);
             });
-            _prevViewProj = currVP;
+            _prevViewProj[eyeIndex] = currVP;
         }
 
         using (var builder = renderGraph.AddRasterRenderPass<PassData>("Cloud Blit Back", out var blitData))
         {
             blitData.src = dst;
-            blitData.dst = resourceData.activeColorTexture;
+            blitData.dst = resourceData.cameraColor;
 
             builder.UseTexture(blitData.src);
             builder.SetRenderAttachment(blitData.dst, 0, AccessFlags.WriteAll);
@@ -312,16 +399,22 @@ public class CloudRenderPass : ScriptableRenderPass
 
     public void Dispose()
     {
-        _quarterCloudHandle?.Release();
-        _quarterCloudBuffer?.Release();
-        foreach (var h in _fullCloudHandles) h?.Release();
-        foreach (var b in _fullCloudBuffers) b?.Release();
+        for (int eye = 0; eye < 2; eye++)
+        {
+            _quarterCloudHandles[eye]?.Release();
+            _quarterCloudBuffers[eye]?.Release();
+            _quarterDepthHandles[eye]?.Release();
+            _quarterDepthBuffers[eye]?.Release();
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            _fullCloudHandles[i]?.Release();
+            _fullCloudBuffers[i]?.Release();
+        }
         _blueNoiseHandle?.Release();
         _settingsBuffer?.Release();
         _LightningBuffer?.Release();
         DetailRenderTexture?.Release();
         ShapeRenderTexture?.Release();
-        _quarterDepthHandle?.Release();
-        _quarterDepthBuffer?.Release();
     }
 }

@@ -16,6 +16,7 @@ float3 _BoundsMax;
 float2 _Resolution;
 float2 _FullResolution;
 uint _FrameIndex;
+int _FlipY;
 
 cbuffer _CloudSettings {
     float3 Offset;
@@ -70,15 +71,30 @@ float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, flo
 }
 
 Ray GenerateRay(uint2 pixelCoord) {
-    //Convert Pixel to World Pos and Direction
-    float2 uv = ((float2)pixelCoord / _FullResolution) * 2.0 - 1.0;
-    float4 viewDir = mul(_CameraInverseProjection, float4(uv, 0.0, 1.0));
-    viewDir /= viewDir.w;
-    float3 worldDir = mul(_CameraToWorld, float4(viewDir.xyz, 0.0)).xyz;
+    float2 uv = (float2(pixelCoord) + 0.5) / _FullResolution;
+
+    if (_FlipY == 1)
+    uv.y = 1.0 - uv.y;
+
+    float2 ndc = uv * 2.0 - 1.0;
+
+    // Reconstruct far-plane position
+    float4 clipPos = float4(ndc, 1.0, 1.0);
+
+    float4 viewPos = mul(_CameraInverseProjection, clipPos);
+    viewPos /= viewPos.w;
+
+    float3 worldDir =
+    mul(_CameraToWorld, float4(viewPos.xyz, 0.0)).xyz;
 
     Ray ray;
-    ray.origin = mul(_CameraToWorld, float4(0, 0, 0, 1)).xyz + float3(0,PLANET_THICKNESS,0);
+
+    ray.origin =
+    mul(_CameraToWorld, float4(0,0,0,1)).xyz +
+    float3(0, PLANET_THICKNESS, 0);
+
     ray.direction = normalize(worldDir);
+
     return ray;
 }
 
@@ -91,8 +107,8 @@ float2 RaySphereIntersect(float3 rayOrigin, float3 rayDir, float radius) {
     float b    = dot(rayOrigin, rayDir);
     float c    = dot(rayOrigin, rayOrigin) - radius * radius;
     float disc = b * b - c;
-    if (disc < 0.0) return float2(-1, -1);
-    float sq = sqrt(disc);
+    //if (disc < 0.0) return float2(-1, -1);
+    float sq = sqrt(abs(disc));
     return float2(-b - sq, -b + sq);
 }
 
@@ -101,9 +117,9 @@ float2 IntersectCloudShell(Ray ray) {
     float2 inner = RaySphereIntersect(ray.origin, ray.direction, SHELL_INNER);
     float2 outer = RaySphereIntersect(ray.origin, ray.direction, SHELL_OUTER);
 
-    float tMin = max(inner.y, 0.0);
-    float tMax = max(outer.y, 0.0);
-    if (tMax <= 0.0 || tMax <= tMin) return float2(-1, -1);
+    float tMin = abs(inner.y);
+    float tMax = abs(outer.y);
+    //if (tMax <= 0.0 || tMax <= tMin) return float2(-1, -1);
     return float2(tMin, tMax);
 }
 
@@ -111,9 +127,7 @@ float2 IntersectCloudShell(Ray ray) {
 bool isInShell(float3 Worldpos) {
     float dist = length(Worldpos);
     if(dist>= SHELL_INNER && dist <= SHELL_OUTER) {
-        if(Worldpos.y > -100) {
-            return true;
-        }
+        return true;
     }
     return false;
 }
@@ -249,7 +263,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax) {
         float3 samplePos = viewPos +t*viewDir;
-        if(samplePos.y-PLANET_THICKNESS <0) {
+        if(samplePos.y-PLANET_THICKNESS <-10000) {
             break;
         }
         float density = GetCloudDensity(samplePos,MipMap);
@@ -375,6 +389,12 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
 
     float4 sceneColor = _SrcTex[FullResPixel];
+    if(_DepthTex[FullResPixel] >0) {
+        _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
+        _CloudDepthTex[id.xy] = 0;
+
+        return;
+    }
     Ray ray = GenerateRay(FullResPixel);
     float2 intersection = IntersectCloudShell(ray);
 
