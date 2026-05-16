@@ -1,9 +1,9 @@
 #pragma kernel Merge
 
-Texture2D<float4>   _SrcTex;
-RWTexture2D<float4> _OutputTex;
-Texture2D<float4>   _CloudBuffer;
-Texture2D<float>    _DepthTex;
+Texture2DArray<float4>   _SrcTex;
+RWTexture2DArray<float4> _OutputTex;
+Texture2DArray<float4>   _CloudBuffer;
+Texture2DArray<float>    _DepthTex;
 
 float2 _Resolution;
 
@@ -20,9 +20,9 @@ void Merge(uint3 id : SV_DispatchThreadID) {
     if (_FlipY == 0)
     pixel.y =  (_Resolution.y - 1 - pixel.y) ;
 
-    float4 src = _SrcTex[ogPixel];
-    float4 cloud = _CloudBuffer[pixel];
-    float depth = _DepthTex[ogPixel];
+    float4 src = _SrcTex[uint3(ogPixel, id.z)];
+    float4 cloud = _CloudBuffer[uint3(pixel, id.z)];
+    float depth = _DepthTex[uint3(ogPixel, id.z)];
     float4 result = src;
 
     bool isSkyPixel = depth == 0;
@@ -36,5 +36,5 @@ void Merge(uint3 id : SV_DispatchThreadID) {
         result.a = 1.0;
     }
 
-    _OutputTex[ogPixel] = result;
+    _OutputTex[uint3(ogPixel, id.z)] = result;
 }

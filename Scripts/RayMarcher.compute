@@ -1,16 +1,18 @@
 #pragma kernel CloudRaymarch
 
-Texture2D<float4>   _SrcTex;
-RWTexture2D<float4> _CloudBuffer;
-Texture2D<float>    _DepthTex;
-RWTexture2D<float>  _CloudDepthTex;
 Texture3D<float2> ShapeTexture;
 Texture3D<float> DetailTexture;
 Texture2D<float4> BlueNoise;
 SamplerState sampler_Trilinear_repeat;
 
-float4x4 _CameraToWorld;
-float4x4 _CameraInverseProjection;
+float4x4 _CameraToWorldPerEye[2];
+float4x4 _CameraInvProjPerEye[2];
+
+RWTexture2DArray<float4> _CloudBuffer; 
+Texture2DArray<float>    _DepthTex;
+RWTexture2DArray<float>  _CloudDepthTex;
+Texture2DArray<float4>   _SrcTex;
+
 float3 _BoundsMin;
 float3 _BoundsMax;
 float2 _Resolution;
@@ -70,7 +72,7 @@ float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, flo
     return float2(dstA, dstB);
 }
 
-Ray GenerateRay(uint2 pixelCoord) {
+Ray GenerateRay(uint2 pixelCoord, uint eyeIndex) {
     float2 uv = (float2(pixelCoord) + 0.5) / _FullResolution;
 
     if (_FlipY == 1)
@@ -78,22 +80,23 @@ Ray GenerateRay(uint2 pixelCoord) {
 
     float2 ndc = uv * 2.0 - 1.0;
 
-    // Reconstruct far-plane position
-    float4 clipPos = float4(ndc, 1.0, 1.0);
+    float4 clip = float4(ndc, 1, 1);
 
-    float4 viewPos = mul(_CameraInverseProjection, clipPos);
-    viewPos /= viewPos.w;
+    float4 view = mul(_CameraInvProjPerEye[eyeIndex], clip);
 
-    float3 worldDir =
-    mul(_CameraToWorld, float4(viewPos.xyz, 0.0)).xyz;
+    // perspective divide
+    view.xyz /= view.w;
+
+    float3 worldPos = mul(_CameraToWorldPerEye[eyeIndex], float4(view.xyz,1)).xyz;
+
+    float3 camPos =
+    mul(_CameraToWorldPerEye[eyeIndex], float4(0,0,0,1)).xyz;
 
     Ray ray;
 
-    ray.origin =
-    mul(_CameraToWorld, float4(0,0,0,1)).xyz +
-    float3(0, PLANET_THICKNESS, 0);
+    ray.origin = camPos + float3(0, PLANET_THICKNESS, 0);
 
-    ray.direction = normalize(worldDir);
+    ray.direction = normalize(worldPos - camPos);
 
     return ray;
 }
@@ -260,8 +263,10 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
     viewPos +=viewDir*rayOffset;
     float MipMap = SelectMipForWorldPos(viewPos);
+    int steps = 0;
     //Iterate from cloud entry to cloud exit position, based on the ray length
-    while(t<tMax) {
+    while(t<tMax && steps < 10000) {
+        steps++;
         float3 samplePos = viewPos +t*viewDir;
         if(samplePos.y-PLANET_THICKNESS <-10000) {
             break;
@@ -388,19 +393,19 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
 
-    float4 sceneColor = _SrcTex[FullResPixel];
-    if(_DepthTex[FullResPixel] >0) {
-        _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
-        _CloudDepthTex[id.xy] = 0;
+    float4 sceneColor = _SrcTex[uint3(FullResPixel, id.z)];
+    if(_DepthTex[uint3(FullResPixel, id.z)] >0) {
+        _CloudBuffer[id.xyz] = float4(0, 0, 0, 1);
+        _CloudDepthTex[id.xyz] = 0;
 
         return;
     }
-    Ray ray = GenerateRay(FullResPixel);
+    Ray ray = GenerateRay(FullResPixel,id.z);
     float2 intersection = IntersectCloudShell(ray);
 
     if (intersection.x < 0 || intersection.y < intersection.x) {
-        _CloudBuffer[id.xy] =float4(0, 0, 0, 0);
-        _CloudDepthTex[id.xy] = 0;
+        _CloudBuffer[id.xyz] =float4(0, 0, 0, 1);
+        _CloudDepthTex[id.xyz] = 0;
         return;
     }
     float depth = 0;
@@ -412,10 +417,10 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         sceneColor.w = 1-result.w;
         float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
         finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
-        _CloudBuffer[id.xy] = result;
-        _CloudDepthTex[id.xy] = depth;
+        _CloudBuffer[id.xyz] = result;
+        _CloudDepthTex[id.xyz] = depth;
     }else {
-        _CloudBuffer[id.xy] = float4(0, 0, 0, 0);
-        _CloudDepthTex[id.xy] = 0;
+        _CloudBuffer[id.xyz] = float4(0, 0, 0, 0);
+        _CloudDepthTex[id.xyz] =0;
     }
 }
