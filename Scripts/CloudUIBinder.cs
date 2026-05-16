@@ -4,7 +4,9 @@ using UnityEngine.UIElements;
 public class CloudUIBinder : MonoBehaviour
 {
     public UIDocument document;
+    public UIDocument SecondaryDocument;
     public CloudManager clouds;
+    private Label FPSLabel;
 
     private void Start()
     {
@@ -79,5 +81,12 @@ public class CloudUIBinder : MonoBehaviour
         {
             clouds.CloudMovementSpeed = evt.newValue;
         });
+        //FPS
+        root = SecondaryDocument.rootVisualElement;
+        FPSLabel = root.Q<Label>("FPSLabel");
+    }
+    private void Update()
+    {
+        FPSLabel.text = "FPS: " + Mathf.RoundToInt(1f / Time.deltaTime);
     }
 }
