@@ -37,6 +37,8 @@ public class CloudRenderPass : ScriptableRenderPass
     // Single ping-pong index (SPI = one RecordRenderGraph call for both eyes)
     private int _currentBuffer = 0;
 
+    private int BigDivider = 4;
+
     // Both eyes' previous VP matrices stored each frame
     private Matrix4x4[] _prevViewProj = new Matrix4x4[2];
 
@@ -48,8 +50,8 @@ public class CloudRenderPass : ScriptableRenderPass
         if (_blueNoiseHandle == null)
             _blueNoiseHandle = RTHandles.Alloc(BlueNoiseTexture);
 
-        int qWidth = Mathf.CeilToInt(fullWidth / 4f);
-        int qHeight = Mathf.CeilToInt(fullHeight / 4f);
+        int qWidth = Mathf.CeilToInt(fullWidth / BigDivider);
+        int qHeight = Mathf.CeilToInt(fullHeight / BigDivider);
 
         void EnsureArray(ref RenderTexture rt, ref RTHandle handle, int w, int h, RenderTextureFormat fmt)
         {
@@ -70,7 +72,7 @@ public class CloudRenderPass : ScriptableRenderPass
         EnsureArray(ref _quarterCloudArray, ref _quarterCloudArrayHandle,
                     qWidth, qHeight, RenderTextureFormat.ARGBHalf);
         EnsureArray(ref _quarterDepthArray, ref _quarterDepthArrayHandle,
-                    qWidth, qHeight, RenderTextureFormat.RHalf);
+                    qWidth, qHeight, RenderTextureFormat.R8);
         EnsureArray(ref _fullCloudArrays[0], ref _fullCloudArrayHandles[0],
                     fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
         EnsureArray(ref _fullCloudArrays[1], ref _fullCloudArrayHandles[1],
@@ -189,8 +191,8 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
 
         int fullWidth = cameraData.cameraTargetDescriptor.width;
         int fullHeight = cameraData.cameraTargetDescriptor.height;
-        int qWidth = Mathf.CeilToInt(fullWidth / 4f);
-        int qHeight = Mathf.CeilToInt(fullHeight / 4f);
+        int qWidth = Mathf.CeilToInt(fullWidth / BigDivider);
+        int qHeight = Mathf.CeilToInt(fullHeight / BigDivider);
 
         EnsureBuffers(fullWidth, fullHeight);
 
@@ -266,6 +268,7 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 cmd.SetComputeMatrixArrayParam(d.shader, "_CameraInvProjPerEye", d.cameraInverseProjection);
                 cmd.SetComputeIntParam(d.shader, "_FlipY", d.flipY);
                 cmd.SetComputeIntParam(d.shader, "_FrameIndex", Time.frameCount);
+                cmd.SetComputeIntParam(d.shader, "_BigDivider", BigDivider);
                 cmd.SetComputeVectorParam(d.shader, "_Resolution", new Vector2(d.quarterWidth, d.quarterHeight));
                 cmd.SetComputeVectorParam(d.shader, "_FullResolution", new Vector2(d.fullWidth, d.fullHeight));
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
@@ -290,6 +293,7 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CurrViewProj", d.currViewProj);
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_PrevViewProj", d.prevViewProj);
                 cmd.SetComputeVectorArrayParam(d.upscaleShader, "_CameraPos", d.cameraPosPerEye);
+                cmd.SetComputeIntParam(d.upscaleShader, "_BigDivider", BigDivider);
                 cmd.SetComputeIntParam(d.upscaleShader, "_FrameIndex", Time.frameCount);
                 cmd.SetComputeVectorParam(d.upscaleShader, "_QuarterResolution", new Vector2(d.quarterWidth, d.quarterHeight));
                 cmd.SetComputeVectorParam(d.upscaleShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));

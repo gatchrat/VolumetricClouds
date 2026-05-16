@@ -13,6 +13,7 @@ float2   _Resolution;
 float2  _QuarterResolution;
 float3  MovementOffset;
 uint    _FrameIndex;
+int _BigDivider;
 float4  _ZBufferParams;
 SamplerState    sampler_linear_clamp;
 SamplerState    sampler_bilinear_clamp;
@@ -39,9 +40,9 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
 
     float2 fullUV       = (float2(id.xy) + 0.5) / _Resolution;
-    float frameOffset = _FrameIndex %16;
-    float2 jitter = float2(frameOffset % 4, frameOffset / 4);
-    float2  quarterCoord = (id.xy-jitter) / 4;
+    float frameOffset = _FrameIndex %(_BigDivider*_BigDivider);
+    float2 jitter = float2(frameOffset % _BigDivider, frameOffset / _BigDivider);
+    float2  quarterCoord = (id.xy-jitter) / _BigDivider;
     float2 quarterUV    = (float2(quarterCoord) + 0.5) / _QuarterResolution;
 
     float4 newSample      =  _QuarterCloudBuffer.SampleLevel(sampler_bilinear_clamp, float3(quarterUV, id.z), 0);
@@ -69,14 +70,14 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
 
     bool   offscreen = any(prevUV < 0.001) || any(prevUV > 0.999);
 
-    if (_FrameIndex<16 || offscreen) {
+    if (_FrameIndex<(_BigDivider*_BigDivider) || offscreen) {
         _CloudBuffer[id.xyz] = newSample;
         return;
     }
 
-    uint2 blockPos  = id.xy % 4;
-    uint  pixelSlot = blockPos.y * 4 + blockPos.x;
-    bool  isFresh   = (pixelSlot == (uint)_FrameIndex % 16);
+    uint2 blockPos  = id.xy % _BigDivider;
+    uint  pixelSlot = blockPos.y * _BigDivider + blockPos.x;
+    bool  isFresh   = (pixelSlot == (uint)_FrameIndex % (_BigDivider*_BigDivider));
 
     float4 history = _HistoryBuffer.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
     float4 minN = newSample - 0.2;

@@ -13,12 +13,11 @@ Texture2DArray<float>    _DepthTex;
 RWTexture2DArray<float>  _CloudDepthTex;
 Texture2DArray<float4>   _SrcTex;
 
-float3 _BoundsMin;
-float3 _BoundsMax;
 float2 _Resolution;
 float2 _FullResolution;
 uint _FrameIndex;
-int _FlipY;
+int _BigDivider;
+uint _FlipY;
 
 cbuffer _CloudSettings {
     float3 Offset;
@@ -252,7 +251,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     //Stepping optimisation
     int stepsWithoutCloud = 0;
-    float stepSize = 250;
+    float stepSize = 600;
     float ShadowStepSize = 800;
     float LightningStepSize = 100;
     int LightningCount = 0;
@@ -383,9 +382,9 @@ uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
     //Multiply by 4 and add offset
     //Offset is simply row by row, possibly check board this ?
 
-    QuarterPixel *=4;
-    uint FrameSlot = _FrameIndex % 16;
-    uint2 PixelOffset = uint2(FrameSlot % 4, FrameSlot / 4);
+    QuarterPixel *=_BigDivider;
+    uint FrameSlot = _FrameIndex % (_BigDivider*_BigDivider);
+    uint2 PixelOffset = uint2(FrameSlot % _BigDivider, FrameSlot / _BigDivider);
     return QuarterPixel+PixelOffset;
 }
 [numthreads(8, 8, 1)]
