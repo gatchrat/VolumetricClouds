@@ -33,6 +33,24 @@ public class CloudRendererFeature : ScriptableRendererFeature
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;
         _pass.Bounds = CloudBounds;
+        switch (Manager.upscalingMode)
+        {
+            case UpscalingMode.None:
+                _pass.BigDivider = 1;
+                break;
+            case UpscalingMode.X4:
+                _pass.BigDivider = 4;
+                break;
+            case UpscalingMode.X8:
+                _pass.BigDivider = 8;
+                break;
+            case UpscalingMode.X16:
+                _pass.BigDivider = 16;
+                break;
+            default:
+                _pass.BigDivider = 4;
+                break;
+        }
         if (Manager.EnableClouds)
         {
 

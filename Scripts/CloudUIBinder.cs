@@ -96,6 +96,31 @@ public class CloudUIBinder : MonoBehaviour
         {
             clouds.EnableClouds = evt.newValue;
         });
+        Slider CloudQualitySlider =
+           root.Q<Slider>("CloudQuality");
+
+        CloudQualitySlider.value = clouds.CloudStepSize;
+
+        CloudQualitySlider.RegisterValueChangedCallback(evt =>
+        {
+            clouds.CloudStepSize = evt.newValue;
+        });
+        Slider ShadowQualitySlider =
+          root.Q<Slider>("ShadowQuality");
+
+        ShadowQualitySlider.value = clouds.ShadowStepSize;
+
+        ShadowQualitySlider.RegisterValueChangedCallback(evt =>
+        {
+            clouds.ShadowStepSize = evt.newValue;
+        });
+        EnumField UpscalingModeEnum =
+            root.Q<EnumField>("UpscalingMode");
+        UpscalingModeEnum.value = clouds.upscalingMode;
+        UpscalingModeEnum.RegisterValueChangedCallback(evt =>
+        {
+            clouds.upscalingMode = (UpscalingMode)evt.newValue;
+        });
     }
     private void Update()
     {

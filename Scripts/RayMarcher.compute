@@ -7,6 +7,7 @@ SamplerState sampler_Trilinear_repeat;
 
 float4x4 _CameraToWorldPerEye[2];
 float4x4 _CameraInvProjPerEye[2];
+float4x4 _CurrViewProj[2];
 
 RWTexture2DArray<float4> _CloudBuffer; 
 Texture2DArray<float>    _DepthTex;
@@ -37,6 +38,8 @@ cbuffer _CloudSettings {
     float3 SunDirection;
     float CLOUD_TOP;
     float CLOUD_BOTTOM;
+    float CloudStepSize;
+    float ShadowStepSize;
 };
 
 struct Lightning {
@@ -233,7 +236,7 @@ bool GetLightSourceDirection(float3 WorldPos, out float3 Dir,out float dist) {
     return false;
 }
 //Mostly Doom based
-float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
+float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise, int eyeIndex) {
     int numShadowSteps = 6;
     float VdotL = dot(viewDir,SunDirection);//TODO Atteniate based on how much of color is suncolor
 
@@ -251,15 +254,13 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     //Stepping optimisation
     int stepsWithoutCloud = 0;
-    float stepSize = 600;
-    float ShadowStepSize = 800;
     float LightningStepSize = 100;
     int LightningCount = 0;
     float OverallLightningDist = 0;
     bool BigSteps = true;
     float BigStepMultiplier = 3.0;
 
-    float rayOffset = (Noise - 0.5) * 0.1 * stepSize; 
+    float rayOffset = (Noise - 0.5) * 0.1 * CloudStepSize; 
     viewPos +=viewDir*rayOffset;
     float MipMap = SelectMipForWorldPos(viewPos);
     int steps = 0;
@@ -278,7 +279,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             if(BigSteps) {
                 //revert big step and start small steps to find exact cloud start
                 BigSteps = false;
-                t-=stepSize*BigStepMultiplier;
+                t-=CloudStepSize*BigStepMultiplier;
                 continue;
             }
 
@@ -297,7 +298,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             float sigE = betaE*density;
             float powder = 4.0*(1.0-exp(-2.0*density));
             float shadowTransmittance = exp(-shadowOpticalDepth);
-            float nextTransmittance = transmittance*exp(-sigE*stepSize);
+            float nextTransmittance = transmittance*exp(-sigE*CloudStepSize);
             float _dTr = transmittance-nextTransmittance;
             //LIGHTNING
             samplePosShadow = samplePos;
@@ -335,9 +336,9 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         }
 
         if(BigSteps) {
-            t+=stepSize*BigStepMultiplier;
+            t+=CloudStepSize*BigStepMultiplier;
         }else {
-            t+=stepSize;
+            t+=CloudStepSize;
         }
     }
 
@@ -393,7 +394,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
 
     float4 sceneColor = _SrcTex[uint3(FullResPixel, id.z)];
-    if(_DepthTex[uint3(FullResPixel, id.z)] >0) {
+    if(_DepthTex[uint3(FullResPixel, id.z)] >0.1) {
         _CloudBuffer[id.xyz] = float4(0, 0, 0, 1);
         _CloudDepthTex[id.xyz] = 0;
 
@@ -410,7 +411,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float depth = 0;
 
     float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
-    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise);
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise, id.z);
     if(result.w > 0) {
         //  if(result.w < 0.07) result.w = result.w * result.w;
         sceneColor.w = 1-result.w;

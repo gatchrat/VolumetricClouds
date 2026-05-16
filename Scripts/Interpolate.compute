@@ -17,6 +17,7 @@ int _BigDivider;
 float4  _ZBufferParams;
 SamplerState    sampler_linear_clamp;
 SamplerState    sampler_bilinear_clamp;
+SamplerState    sampler_trilinear_clamp;
 SamplerState    sampler_point_clamp;
 
 float LinearEyeDepth(float d) {
@@ -45,7 +46,7 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     float2  quarterCoord = (id.xy-jitter) / _BigDivider;
     float2 quarterUV    = (float2(quarterCoord) + 0.5) / _QuarterResolution;
 
-    float4 newSample      =  _QuarterCloudBuffer.SampleLevel(sampler_bilinear_clamp, float3(quarterUV, id.z), 0);
+    float4 newSample      =  _QuarterCloudBuffer.SampleLevel(sampler_trilinear_clamp, float3(quarterUV, id.z), 0);
     float  cloudWorldDist  = _CloudDepthTex.SampleLevel(sampler_point_clamp,  float3(quarterUV, id.z), 0).r;
 
     if (cloudWorldDist < 0.1) {
@@ -53,51 +54,6 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-    // Reconstruct world position directly from ray + distance
-    float dist = _CloudDepthTex.SampleLevel(sampler_point_clamp,  float3(quarterUV, id.z), 0).r;
-    float3 rayDir = GetRayDir(fullUV, id.z);
-    float3 worldPos = _CameraPos[id.z].xyz + rayDir * dist - MovementOffset;
-
-    float4 prevClip = mul(_PrevViewProj[id.z], float4(worldPos, 1.0));
-    prevClip /= prevClip.w;
-    float2 prevUV;
-    prevUV.x =  prevClip.x * 0.5 + 0.5;
-    prevUV.y = -prevClip.y * 0.5 + 0.5; 
-
-    // float2 motion = prevUV - fullUV;
-    //_CloudBuffer[id.xy] = float4(motion.x * 10 + 0.5, motion.y * 10 + 0.5, 0, 1);
-    // return;
-
-    bool   offscreen = any(prevUV < 0.001) || any(prevUV > 0.999);
-
-    if (_FrameIndex<(_BigDivider*_BigDivider) || offscreen) {
-        _CloudBuffer[id.xyz] = newSample;
-        return;
-    }
-
-    uint2 blockPos  = id.xy % _BigDivider;
-    uint  pixelSlot = blockPos.y * _BigDivider + blockPos.x;
-    bool  isFresh   = (pixelSlot == (uint)_FrameIndex % (_BigDivider*_BigDivider));
-
-    float4 history = _HistoryBuffer.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
-    float4 minN = newSample - 0.2;
-    float4 maxN = newSample + 0.2;
-
-    history = clamp(history, minN, maxN);
-
-    if (history.w == 0) {
-        history = newSample;
-    }
-
-    if (isFresh) {
-        float motionMag = length(prevUV - fullUV);
-        float alpha     = lerp(1.0 / 16.0, 0.5, saturate(motionMag * 20.0));
-        _CloudBuffer[id.xyz] = lerp(history, newSample, alpha);
-    } else {
-        float motionMag     = length(prevUV - fullUV);
-        float historyWeight = saturate(1.0 - motionMag * 50.0);
-        historyWeight       = min(historyWeight, 0.92); //always use a little bit of new info to fight trailing
-        _CloudBuffer[id.xyz] = lerp(newSample, history, historyWeight);
-        // _CloudBuffer[id.xyz] = history;
-    }
+    _CloudBuffer[id.xyz] = newSample;
+    return;
 }

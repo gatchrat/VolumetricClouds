@@ -37,7 +37,7 @@ public class CloudRenderPass : ScriptableRenderPass
     // Single ping-pong index (SPI = one RecordRenderGraph call for both eyes)
     private int _currentBuffer = 0;
 
-    private int BigDivider = 4;
+    public int BigDivider = 4;
 
     // Both eyes' previous VP matrices stored each frame
     private Matrix4x4[] _prevViewProj = new Matrix4x4[2];
@@ -266,6 +266,7 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 //////////////////////////////////////RAYMARCH/////////////////////////////////////////////
                 cmd.SetComputeMatrixArrayParam(d.shader, "_CameraToWorldPerEye", d.cameraToWorld);
                 cmd.SetComputeMatrixArrayParam(d.shader, "_CameraInvProjPerEye", d.cameraInverseProjection);
+                cmd.SetComputeMatrixArrayParam(d.shader, "_CurrViewProj", d.currViewProj);
                 cmd.SetComputeIntParam(d.shader, "_FlipY", d.flipY);
                 cmd.SetComputeIntParam(d.shader, "_FrameIndex", Time.frameCount);
                 cmd.SetComputeIntParam(d.shader, "_BigDivider", BigDivider);

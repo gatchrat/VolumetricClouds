@@ -36,9 +36,17 @@ public struct CloudSettings
     public float3 SunDirection;
     public float CLOUD_TOP;
     public float CLOUD_BOTTOM;
-
+    public float CloudStepSize;
+    public float ShadowStepSize;
 }
 
+public enum UpscalingMode
+{
+    None,
+    X4,
+    X8,
+    X16
+}
 public class CloudManager : MonoBehaviour
 {
     [Header("Settings (Use Light settings color and intensity)")]
@@ -62,6 +70,9 @@ public class CloudManager : MonoBehaviour
     public Vector3 Scale = new Vector3(1, 1, 1);
     public bool EnableClouds = true;
     [Header("Technical Stuff")]
+    public float CloudStepSize = 250f;
+    public float ShadowStepSize = 800f;
+    public UpscalingMode upscalingMode = UpscalingMode.X4;
     public int seed = 42;
     public int ShapeTextureSize = 128;
     public RenderTexture ShapeRenderTexture;
@@ -103,7 +114,8 @@ public class CloudManager : MonoBehaviour
         cloudSettings.SunIntensity = SunLight.intensity;
         cloudSettings.CLOUD_TOP = CloudThickness;
         cloudSettings.CLOUD_BOTTOM = CLOUD_BOTTOM;
-
+        cloudSettings.CloudStepSize = CloudStepSize;
+        cloudSettings.ShadowStepSize = ShadowStepSize;
         if (Lightning)
         {
             handleLightning();
