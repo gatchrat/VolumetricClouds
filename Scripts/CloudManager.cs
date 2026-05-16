@@ -60,6 +60,7 @@ public class CloudManager : MonoBehaviour
     [Range(0f, 10f)]
     public float CloudMovementSpeed = 1f;
     public Vector3 Scale = new Vector3(1, 1, 1);
+    public bool EnableClouds = true;
     [Header("Technical Stuff")]
     public int seed = 42;
     public int ShapeTextureSize = 128;

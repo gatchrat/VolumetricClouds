@@ -82,9 +82,20 @@ public class CloudUIBinder : MonoBehaviour
         {
             clouds.CloudMovementSpeed = evt.newValue;
         });
+
         //FPS
         root = SecondaryDocument.rootVisualElement;
         FPSLabel = root.Q<Label>("FPSLabel");
+
+        Toggle EnableCloudsToggle =
+           root.Q<Toggle>("EnableCloudsToggle");
+
+        EnableCloudsToggle.value = clouds.EnableClouds;
+
+        EnableCloudsToggle.RegisterValueChangedCallback(evt =>
+        {
+            clouds.EnableClouds = evt.newValue;
+        });
     }
     private void Update()
     {
