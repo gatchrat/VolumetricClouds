@@ -246,20 +246,6 @@ public class CloudRenderPass : ScriptableRenderPass
             name = "CameraColorCopy"
         };
 
-        TextureHandle cameraCopy = renderGraph.CreateTexture(copyDesc);
-        using (var builder = renderGraph.AddRasterRenderPass<PassData>("Copy Camera Color", out var d))
-        {
-            d.src = resourceData.cameraColor;
-            d.dst = cameraCopy;
-
-            builder.UseTexture(d.src);
-            builder.SetRenderAttachment(d.dst, 0);
-
-            builder.SetRenderFunc((PassData data, RasterGraphContext ctx) =>
-            {
-                Blitter.BlitTexture(ctx.cmd, data.src, new Vector4(1, 1, 0, 0), 0, false);
-            });
-        }
 
         // ── Per-eye ping-pong buffer selection ────────────────────────────────
         int prevPing = _currentBuffer[eyeIndex];
@@ -281,7 +267,8 @@ public class CloudRenderPass : ScriptableRenderPass
             data.CurFrameMovement = CurFrameMovement;
             data.camera = cam;
 
-            data.src = cameraCopy;
+            data.src = resourceData.cameraColor;
+            builder.UseTexture(data.src, AccessFlags.Read);
             data.dst = dst;
             data.settingsBuffer = _settingsBuffer;
             data.lightningBuffer = _LightningBuffer;
