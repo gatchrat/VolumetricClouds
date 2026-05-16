@@ -1,17 +1,14 @@
 #pragma kernel GenerateWorley
 #pragma kernel GenerateWorleyDetail
-#pragma kernel CombineWorley
-#pragma kernel CombineWorleyDetail
 
-RWTexture3D<float4> ShapeRenderTexture;
-RWTexture3D<float4> DetailRenderTexture;
+RWTexture3D<float2> ShapeRenderTexture;
+RWTexture3D<float> DetailRenderTexture;
 uint TextureSize;
 uint CellsPerRow;
-uint CurLayer;
+uint CellsPerRowArray;
 float4 fmbWeights;
 
-float Hash(uint n)
-{
+float Hash(uint n) {
     n = (n ^ 61u) ^ (n >> 16u);
     n *= 9u;
     n ^= n >> 4u;
@@ -23,99 +20,167 @@ float3 hash(int3 p) {
     uint seed = uint(p.x) * 1664525u + uint(p.y) * 1013904223u + uint(p.z) * 22695477u;
     return float3(Hash(seed), Hash(seed ^ 0xA3C59AC3u), Hash(seed ^ 0x59A3C59Au));
 }
-
-[numthreads(8,8,8)]
-void GenerateWorley(uint3 id : SV_DispatchThreadID) {
-    if (any(id >= TextureSize)) return;
-    float3 cellPos =  float3(id)/float(TextureSize)*float(CellsPerRow);
-    int3 CellId = int3(cellPos);
-    float3 w = frac(cellPos);
-    CellId += int3(443189,79301,41681);
-    float minDistSq = 10000.0;
-
-    for (int x = -1; x <=1; ++x)
-    for (int y = -1; y <=1; ++y)
-        for (int z = -1; z <=1; ++z) {
-            int3 vertexId = (CellId + int3(x,y,z)) % CellsPerRow;
-            float3 pointFrac = hash(vertexId);
-            float3 toPoint = (float3(x,y,z)+pointFrac)-w;
-            minDistSq = min(minDistSq,dot(toPoint,toPoint));
-    }
-    float4 val =ShapeRenderTexture.Load(id);
-    if (CurLayer == 0) val.x = 1-minDistSq;
-        else if (CurLayer == 1) val.y = 1-minDistSq;
-        else if (CurLayer == 2) val.z = 1-minDistSq;
-        else if (CurLayer == 3) val.w = 1-minDistSq;
-    ShapeRenderTexture[id] =val;
-}
-
-[numthreads(8,8,8)]
-void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) { //Different kernel because i possibly had some cross writing between buffers before. Probably just skill-issue
-    if (any(id >= TextureSize)) return;
-    float3 cellPos =  float3(id)/float(TextureSize)*float(CellsPerRow);
-    int3 CellId = int3(cellPos);
-    float3 w = frac(cellPos);
-    CellId += int3(443189,79301,41681);
-    float minDistSq = 10000.0;
-
-    for (int x = -1; x <=1; ++x)
-    for (int y = -1; y <=1; ++y)
-        for (int z = -1; z <=1; ++z) {
-            int3 vertexId = (CellId + int3(x,y,z)) % CellsPerRow;
-            float3 pointFrac = hash(vertexId);
-            float3 toPoint = (float3(x,y,z)+pointFrac)-w;
-            minDistSq = min(minDistSq,dot(toPoint,toPoint));
-    }
-    float4 val =DetailRenderTexture.Load(id);
-    if (CurLayer == 0) val.x = 1-minDistSq;
-        else if (CurLayer == 1) val.y = 1-minDistSq;
-        else if (CurLayer == 2) val.z = 1-minDistSq;
-        else if (CurLayer == 3) val.w = 1-minDistSq;
-    DetailRenderTexture[id] =val;
-}
-float PerlinNoise(float3 Pos){
+float PerlinNoise(float3 Pos) {
     float3 uvw = Pos/float(TextureSize);
     float numCells = 4;
     float3 CellPos = uvw*numCells;
     int3 cellId = int3(CellPos);
     float3 w = frac(CellPos);
-     cellId += int3(443189,79301,41681);
-     float3 u = w*w*w*(w*(w*6.0-15.0)+10.0);
-     float Noise = 0.0;
-     float3 weights = float3(0.0,0.0,0.0);
-     weights.z  = 1.0-u.z;
-    for(int z = 0; z<=1; ++z){
+    cellId += int3(443189,79301,41681);
+    float3 u = w*w*w*(w*(w*6.0-15.0)+10.0);
+    float Noise = 0.0;
+    float3 weights = float3(0.0,0.0,0.0);
+    weights.z  = 1.0-u.z;
+    for(int z = 0; z<=1; ++z) {
         weights.y = 1.0-u.y;
-        for(int y = 0; y<=1; ++y){
+        for(int y = 0; y<=1; ++y) {
             weights.x = 1.0-u.x;
-            for(int x = 0; x<=1; ++x){
+            for(int x = 0; x<=1; ++x) {
                 int3 vertexId =(cellId+int3(x,y,z))%numCells;
                 float3 gradVec = hash(vertexId)*2.0-1.0;
                 float dotProduct = dot(gradVec,w-float3(x,y,z));
                 Noise += weights.x*weights.y*weights.z*dotProduct;
                 weights.x = 1.0-weights.x;
-     }
-     weights.y = 1.0-weights.y;
-     }
-     weights.z = 1.0-weights.z;
-     }
-     return Noise;
+            }
+            weights.y = 1.0-weights.y;
+        }
+        weights.z = 1.0-weights.z;
+    }
+    return Noise;
 }
 [numthreads(8,8,8)]
-void CombineWorley(uint3 id : SV_DispatchThreadID) {
-    if (any(id >= (uint)TextureSize)) return;
-    float4 val = ShapeRenderTexture.Load(id);
+void GenerateWorley(uint3 id : SV_DispatchThreadID) {
+    if (any(id >= TextureSize)) return;
+
+    float4 val =float4(0,0,0,0);
+
+    //x
+    float currentCellsPerRow = 8;
+    float3 cellPos =  float3(id)/float(TextureSize)*float(currentCellsPerRow);
+    int3 CellId = int3(cellPos);
+    float3 w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    float minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % currentCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.x = 1-minDistSq;
+    //y
+    currentCellsPerRow = 12;
+    cellPos =  float3(id)/float(TextureSize)*float(currentCellsPerRow);
+    CellId = int3(cellPos);
+    w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % currentCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.y = 1-minDistSq;
+    //z
+    currentCellsPerRow = 20;
+    cellPos =  float3(id)/float(TextureSize)*float(currentCellsPerRow);
+    CellId = int3(cellPos);
+    w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % currentCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.z = 1-minDistSq;
+    //w
+    currentCellsPerRow = 24;
+    cellPos =  float3(id)/float(TextureSize)*float(currentCellsPerRow);
+    CellId = int3(cellPos);
+    w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % currentCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.w = 1-minDistSq;
+
     float combined = val.x*fmbWeights.x + val.y*fmbWeights.y + val.w*fmbWeights.z; //Leave 20 for Perlin
     float Perlin =lerp(0.5*PerlinNoise(id)+0.5,1,0.1*(2*val.z-1));
-    ShapeRenderTexture[id] = float4(1-combined, Perlin, 0, 1);
+    ShapeRenderTexture[id] = float2(1-combined, Perlin);
 }
 
 [numthreads(8,8,8)]
-void CombineWorleyDetail(uint3 id : SV_DispatchThreadID) {
-    if (any(id >= (uint)TextureSize)) return;
-    float4 val = DetailRenderTexture.Load(id);
+void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
+    //Different kernel because i possibly had some cross writing between buffers before. Probably just skill-issue
+    if (any(id >= TextureSize)) return;
+    float3 val = float3(0,0,0);
+
+    //x
+    float CurCellsPerRow = 4;
+    float3 cellPos =  float3(id)/float(TextureSize)*float(CurCellsPerRow);
+    int3 CellId = int3(cellPos);
+    float3 w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    float minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % CurCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.x = 1-minDistSq;
+    //y
+    CurCellsPerRow = 8;
+    cellPos =  float3(id)/float(TextureSize)*float(CurCellsPerRow);
+    CellId = int3(cellPos);
+    w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % CurCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.y = 1-minDistSq;
+
+    //z
+    CurCellsPerRow = 12;
+    cellPos =  float3(id)/float(TextureSize)*float(CurCellsPerRow);
+    CellId = int3(cellPos);
+    w = frac(cellPos);
+    CellId += int3(443189,79301,41681);
+    minDistSq = 10000.0;
+    for (int x = -1; x <=1; ++x)
+    for (int y = -1; y <=1; ++y)
+    for (int z = -1; z <=1; ++z) {
+        int3 vertexId = (CellId + int3(x,y,z)) % CurCellsPerRow;
+        float3 pointFrac = hash(vertexId);
+        float3 toPoint = (float3(x,y,z)+pointFrac)-w;
+        minDistSq = min(minDistSq,dot(toPoint,toPoint));
+    }
+    val.z = 1-minDistSq;
+
     float combined = val.x*0.625 + val.y*0.25 + val.z*0.125 ;
-    
-    DetailRenderTexture[id] = float4(1-combined, 0, 0, 1);
+    DetailRenderTexture[id] =1-combined;
 }
 

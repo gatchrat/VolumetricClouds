@@ -201,7 +201,7 @@ public class CloudManager : MonoBehaviour
             DetailRenderTexture.Release();
         }
 
-        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, GraphicsFormat.R8G8B8A8_UNorm) //INSANE Importance. No noticable difference to 32bit float in quality but 360 vs 620 fps
+        ShapeRenderTexture = new RenderTexture(ShapeTextureSize, ShapeTextureSize, 0, GraphicsFormat.R8G8_UNorm) //INSANE Importance. No noticable difference to 32bit float in quality but 360 vs 620 fps
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
@@ -212,7 +212,7 @@ public class CloudManager : MonoBehaviour
         };
         ShapeRenderTexture.Create();
 
-        DetailRenderTexture = new RenderTexture(32, 32, 0, GraphicsFormat.R8G8B8A8_UNorm)
+        DetailRenderTexture = new RenderTexture(32, 32, 0, GraphicsFormat.R8_UNorm)
         {
             enableRandomWrite = true,
             dimension = UnityEngine.Rendering.TextureDimension.Tex3D,
@@ -228,7 +228,6 @@ public class CloudManager : MonoBehaviour
 
 
         CurrentKernel = WorleyComputer.FindKernel("GenerateWorley");
-        WorleyComputer.SetInt("Mode", 0);
         WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
         WorleyComputer.SetInt("TextureSize", ShapeTextureSize);
 
@@ -236,28 +235,7 @@ public class CloudManager : MonoBehaviour
         int CurCellsPerRow = ShapeWosleyCellCount[0];
         int groups = Mathf.CeilToInt(ShapeTextureSize / 8f);
         WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 0);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-        CurCellsPerRow = ShapeWosleyCellCount[1];
-        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 1);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-        CurCellsPerRow = ShapeWosleyCellCount[2];
-        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 2);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-        CurCellsPerRow = ShapeWosleyCellCount[3];
-        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 3);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-        CurrentKernel = WorleyComputer.FindKernel("CombineWorley");
-        WorleyComputer.SetTexture(CurrentKernel, "ShapeRenderTexture", ShapeRenderTexture);
         WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2]);
-
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
 
         /////////////////////////////DETAIL///////////////////////////////////////////////
@@ -267,31 +245,7 @@ public class CloudManager : MonoBehaviour
         CurCellsPerRow = DetailWosleyCellCount[0];
         WorleyComputer.SetInt("TextureSize", 32);
         WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 0);
-        WorleyComputer.SetInt("Mode", 1);
         WorleyComputer.SetTexture(CurrentKernel, "DetailRenderTexture", DetailRenderTexture);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-
-
-        CurCellsPerRow = DetailWosleyCellCount[1];
-        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 1);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-
-
-        CurCellsPerRow = DetailWosleyCellCount[2];
-        WorleyComputer.SetInt("CellsPerRow", CurCellsPerRow);
-        WorleyComputer.SetInt("CurLayer", 2);
-        WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
-
-        CurrentKernel = WorleyComputer.FindKernel("CombineWorleyDetail");
-        WorleyComputer.SetTexture(CurrentKernel, "DetailRenderTexture", DetailRenderTexture);
-        WorleyComputer.SetInt("Mode", 1);
-        WorleyComputer.SetFloats("fmbWeights", fBmWeights[0], fBmWeights[1], fBmWeights[2]);
-
-
         WorleyComputer.Dispatch(CurrentKernel, groups, groups, groups);
     }
     void CreateLightning()

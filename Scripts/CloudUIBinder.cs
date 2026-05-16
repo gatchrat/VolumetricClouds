@@ -7,6 +7,7 @@ public class CloudUIBinder : MonoBehaviour
     public UIDocument SecondaryDocument;
     public CloudManager clouds;
     private Label FPSLabel;
+    private float FPSTimer = 1f;
 
     private void Start()
     {
@@ -87,6 +88,11 @@ public class CloudUIBinder : MonoBehaviour
     }
     private void Update()
     {
-        FPSLabel.text = "FPS: " + Mathf.RoundToInt(1f / Time.deltaTime);
+        FPSTimer -= Time.deltaTime;
+        if (FPSTimer <= 0f)
+        {
+            FPSTimer = 0.5f;
+            FPSLabel.text = "FPS: " + Mathf.RoundToInt(1f / Time.deltaTime);
+        }
     }
 }
