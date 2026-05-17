@@ -22,17 +22,20 @@ public class CloudRenderPass : ScriptableRenderPass
     public Texture2D BlueNoiseTexture;
     private CloudSettings _lastSettings;
 
-    // ── SPI array textures (depth=2, one slice per eye) ───────────────────
-    private RenderTexture _quarterCloudArray;
+    // (depth=2, one slice per eye) ───────────────────
+
+    private RenderTexture _quarterCloudColor;
+    private RenderTexture _quarterCloudAlpha;
     private RenderTexture _quarterDepthArray;
-    private RenderTexture[] _fullCloudArrays = new RenderTexture[2]; // ping-pong
+    private RenderTexture[] _fullCloudColors = new RenderTexture[2];
+    private RenderTexture[] _fullCloudAlphas = new RenderTexture[2];
 
     // RTHandles for RenderGraph import
-    private RTHandle _quarterCloudArrayHandle;
+    private RTHandle _quarterCloudColorHandle;
+    private RTHandle _quarterCloudAlphaHandle;
     private RTHandle _quarterDepthArrayHandle;
-    private RenderTexture _mergeOutputArray;
-    private RTHandle _mergeOutputArrayHandle;
-    private RTHandle[] _fullCloudArrayHandles = new RTHandle[2];
+    private RTHandle[] _fullCloudColorHandles = new RTHandle[2];
+    private RTHandle[] _fullCloudAlphaHandles = new RTHandle[2];
 
     // Single ping-pong index (SPI = one RecordRenderGraph call for both eyes)
     private int _currentBuffer = 0;
@@ -69,16 +72,13 @@ public class CloudRenderPass : ScriptableRenderPass
             handle = RTHandles.Alloc(rt);
         }
 
-        EnsureArray(ref _quarterCloudArray, ref _quarterCloudArrayHandle,
-                    qWidth, qHeight, RenderTextureFormat.ARGBHalf);
-        EnsureArray(ref _quarterDepthArray, ref _quarterDepthArrayHandle,
-                    qWidth, qHeight, RenderTextureFormat.RHalf);
-        EnsureArray(ref _fullCloudArrays[0], ref _fullCloudArrayHandles[0],
-                    fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
-        EnsureArray(ref _fullCloudArrays[1], ref _fullCloudArrayHandles[1],
-                    fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
-        EnsureArray(ref _mergeOutputArray, ref _mergeOutputArrayHandle,
-fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
+        EnsureArray(ref _quarterCloudColor, ref _quarterCloudColorHandle, qWidth, qHeight, RenderTextureFormat.RGB111110Float);
+        EnsureArray(ref _quarterCloudAlpha, ref _quarterCloudAlphaHandle, qWidth, qHeight, RenderTextureFormat.RHalf);
+        EnsureArray(ref _quarterDepthArray, ref _quarterDepthArrayHandle, qWidth, qHeight, RenderTextureFormat.RHalf);
+        EnsureArray(ref _fullCloudColors[0], ref _fullCloudColorHandles[0], fullWidth, fullHeight, RenderTextureFormat.RGB111110Float);
+        EnsureArray(ref _fullCloudColors[1], ref _fullCloudColorHandles[1], fullWidth, fullHeight, RenderTextureFormat.RGB111110Float);
+        EnsureArray(ref _fullCloudAlphas[0], ref _fullCloudAlphaHandles[0], fullWidth, fullHeight, RenderTextureFormat.RHalf);
+        EnsureArray(ref _fullCloudAlphas[1], ref _fullCloudAlphaHandles[1], fullWidth, fullHeight, RenderTextureFormat.RHalf);
     }
 
     private ComputeBuffer _settingsBuffer;
@@ -133,7 +133,8 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
         public Bounds bounds;
         public TextureHandle src;
         public TextureHandle dst;
-        public TextureHandle quarterCloudBuffer;  // Tex2DArray, 2 slices
+        public TextureHandle quarterCloudColor;   // Tex2DArray, 2 slices, 
+        public TextureHandle quarterCloudAlpha;   // Tex2DArray, 2 slices, 
         public TextureHandle quarterDepthBuffer;  // Tex2DArray, 2 slices
         public TextureHandle depthBuffer;
         public TextureHandle blueNoiseHandle;
@@ -142,8 +143,10 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
         public GraphicsBuffer lightningBuffer;
         public int fullWidth, fullHeight;
         public int quarterWidth, quarterHeight;
-        public TextureHandle historyBuffer;       // Tex2DArray, 2 slices
-        public TextureHandle fullCloudBuffer;     // Tex2DArray, 2 slices
+        public TextureHandle historyColor;        // Tex2DArray, 2 slices,
+        public TextureHandle historyAlpha;        // Tex2DArray, 2 slices, 
+        public TextureHandle fullCloudColor;      // Tex2DArray, 2 slices, 
+        public TextureHandle fullCloudAlpha;      // Tex2DArray, 2 slices, 
         public Matrix4x4[] prevViewProj;          // [2]
         public Matrix4x4[] currViewProj;          // [2]
         public Matrix4x4[] currInvViewProj;       // [2]
@@ -241,10 +244,13 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
 
             // ── Import Tex2DArray handles ──────────────────────────────────
             data.blueNoiseHandle = renderGraph.ImportTexture(_blueNoiseHandle);
-            data.quarterCloudBuffer = renderGraph.ImportTexture(_quarterCloudArrayHandle);
+            data.quarterCloudColor = renderGraph.ImportTexture(_quarterCloudColorHandle);
+            data.quarterCloudAlpha = renderGraph.ImportTexture(_quarterCloudAlphaHandle);
             data.quarterDepthBuffer = renderGraph.ImportTexture(_quarterDepthArrayHandle);
-            data.historyBuffer = renderGraph.ImportTexture(_fullCloudArrayHandles[prevPing]);
-            data.fullCloudBuffer = renderGraph.ImportTexture(_fullCloudArrayHandles[currPing]);
+            data.historyColor = renderGraph.ImportTexture(_fullCloudColorHandles[prevPing]);
+            data.historyAlpha = renderGraph.ImportTexture(_fullCloudAlphaHandles[prevPing]);
+            data.fullCloudColor = renderGraph.ImportTexture(_fullCloudColorHandles[currPing]);
+            data.fullCloudAlpha = renderGraph.ImportTexture(_fullCloudAlphaHandles[currPing]);
             data.depthBuffer = resourceData.cameraDepthTexture;
             data.src = resourceData.cameraColor;
             data.dst = dst;
@@ -254,10 +260,13 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
             builder.UseTexture(data.src, AccessFlags.Read);
             builder.UseTexture(data.dst, AccessFlags.WriteAll);
             builder.UseTexture(data.depthBuffer, AccessFlags.Read);
-            builder.UseTexture(data.quarterCloudBuffer, AccessFlags.ReadWrite);
+            builder.UseTexture(data.quarterCloudColor, AccessFlags.ReadWrite);
+            builder.UseTexture(data.quarterCloudAlpha, AccessFlags.ReadWrite);
             builder.UseTexture(data.quarterDepthBuffer, AccessFlags.ReadWrite);
-            builder.UseTexture(data.historyBuffer, AccessFlags.Read);
-            builder.UseTexture(data.fullCloudBuffer, AccessFlags.WriteAll);
+            builder.UseTexture(data.historyColor, AccessFlags.Read);
+            builder.UseTexture(data.historyAlpha, AccessFlags.Read);
+            builder.UseTexture(data.fullCloudColor, AccessFlags.WriteAll);
+            builder.UseTexture(data.fullCloudAlpha, AccessFlags.WriteAll);
 
             builder.SetRenderFunc((PassData d, ComputeGraphContext ctx) =>
             {
@@ -276,7 +285,8 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
                 cmd.SetComputeVectorParam(d.shader, "SunPostion", d.SunPos);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_SrcTex", d.src);
-                cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudBuffer", d.quarterCloudBuffer);
+                cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudColorBuffer", d.quarterCloudColor);
+                cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudAlphaBuffer", d.quarterCloudAlpha);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "BlueNoise", d.blueNoiseHandle);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudDepthTex", d.quarterDepthBuffer);
@@ -300,9 +310,12 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 cmd.SetComputeVectorParam(d.upscaleShader, "_QuarterResolution", new Vector2(d.quarterWidth, d.quarterHeight));
                 cmd.SetComputeVectorParam(d.upscaleShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
                 cmd.SetComputeVectorParam(d.upscaleShader, "_CloudWorldMotion", d.cloudWorldMotion);
-                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_HistoryBuffer", d.historyBuffer);
-                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudBuffer", d.fullCloudBuffer);
-                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudBuffer", d.quarterCloudBuffer);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_HistoryColor", d.historyColor);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_HistoryAlpha", d.historyAlpha);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudColorBuffer", d.fullCloudColor);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudAlphaBuffer", d.fullCloudAlpha);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudColor", d.quarterCloudColor);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudAlpha", d.quarterCloudAlpha);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudDepthTex", d.quarterDepthBuffer);
 
                 int groupsX = Mathf.CeilToInt(d.fullWidth / 8f);
@@ -312,7 +325,8 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 /////////////////////////////////////MERGE//////////////////////////////////////////////
                 cmd.SetComputeIntParam(d.mergeShader, "_FlipY", d.flipY);
                 cmd.SetComputeVectorParam(d.mergeShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
-                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudBuffer", d.fullCloudBuffer);
+                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudColorBuffer", d.fullCloudColor);
+                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudAlphaBuffer", d.fullCloudAlpha);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_OutputTex", d.dst);
@@ -337,12 +351,15 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
 
     public void Dispose()
     {
-        _quarterCloudArrayHandle?.Release(); _quarterCloudArray?.Release();
+        _quarterCloudColorHandle?.Release(); _quarterCloudColor?.Release();
+        _quarterCloudAlphaHandle?.Release(); _quarterCloudAlpha?.Release();
         _quarterDepthArrayHandle?.Release(); _quarterDepthArray?.Release();
         for (int i = 0; i < 2; i++)
         {
-            _fullCloudArrayHandles[i]?.Release();
-            _fullCloudArrays[i]?.Release();
+            _fullCloudColorHandles[i]?.Release();
+            _fullCloudColors[i]?.Release();
+            _fullCloudAlphaHandles[i]?.Release();
+            _fullCloudAlphas[i]?.Release();
         }
         _blueNoiseHandle?.Release();
         _settingsBuffer?.Release();

@@ -9,7 +9,8 @@ float4x4 _CameraToWorldPerEye[2];
 float4x4 _CameraInvProjPerEye[2];
 float4x4 _CurrViewProj[2];
 
-RWTexture2DArray<float4> _CloudBuffer; 
+RWTexture2DArray<float3> _CloudColorBuffer;
+RWTexture2DArray<float>  _CloudAlphaBuffer;
 Texture2DArray<float>    _DepthTex;
 RWTexture2DArray<float>  _CloudDepthTex;
 Texture2DArray<float4>   _SrcTex;
@@ -395,7 +396,8 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
 
     float4 sceneColor = _SrcTex[uint3(FullResPixel, id.z)];
     if(_DepthTex[uint3(FullResPixel, id.z)] >0.1) {
-        _CloudBuffer[id.xyz] = float4(0, 0, 0, 1);
+        _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
+        _CloudAlphaBuffer[id.xyz] = 1;
         _CloudDepthTex[id.xyz] = 0;
 
         return;
@@ -404,7 +406,8 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float2 intersection = IntersectCloudShell(ray);
 
     if (intersection.x < 0 || intersection.y < intersection.x) {
-        _CloudBuffer[id.xyz] =float4(0, 0, 0, 1);
+        _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
+        _CloudAlphaBuffer[id.xyz] = 1;
         _CloudDepthTex[id.xyz] = 0;
         return;
     }
@@ -417,10 +420,12 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         sceneColor.w = 1-result.w;
         float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
         finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
-        _CloudBuffer[id.xyz] = result;
+        _CloudColorBuffer[id.xyz] = result.rgb;
+        _CloudAlphaBuffer[id.xyz] = result.w;
         _CloudDepthTex[id.xyz] = depth;
     }else {
-        _CloudBuffer[id.xyz] = float4(0, 0, 0, 0);
+        _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
+        _CloudAlphaBuffer[id.xyz] = 0;
         _CloudDepthTex[id.xyz] =0;
     }
 }

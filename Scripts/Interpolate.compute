@@ -5,10 +5,13 @@
 //https://gamedev.net/forums/topic/698511-temporal-reprojection-on-volumetric-cloud-rendering/
 //+1 Website that got shutdown after i read it :D
 
-Texture2DArray<float4>   _QuarterCloudBuffer;   // current frame, quarter-res raymarch result
-Texture2DArray<float4>   _HistoryBuffer;        // previous frame, full-res result
-RWTexture2DArray<float4> _CloudBuffer;          // current frame, full-res output
-Texture2DArray<float>    _CloudDepthTex;        // quarter-res cloud world distance 
+Texture2DArray<float3>   _QuarterCloudColor;    // current frame, quarter-res raymarch RGB
+Texture2DArray<float>    _QuarterCloudAlpha;    // current frame, quarter-res raymarch alpha
+Texture2DArray<float3>   _HistoryColor;         // previous frame, full-res RGB
+Texture2DArray<float>    _HistoryAlpha;         // previous frame, full-res alpha
+RWTexture2DArray<float3> _CloudColorBuffer;     // current frame, full-res output RGB
+RWTexture2DArray<float>  _CloudAlphaBuffer;     // current frame, full-res output alpha
+Texture2DArray<float>    _CloudDepthTex;        // quarter-res cloud world distance
 
 float4   _CameraPos[2];
 float4x4 _CameraToWorldPerEye[2];
@@ -69,7 +72,9 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     float2 quarterCoord = (float2(id.xy) - float2(jitter)) / float(_BigDivider);
     float2 quarterUV    = (quarterCoord + 0.5) / _QuarterResolution;
 
-    float4 newSample = _QuarterCloudBuffer.SampleLevel(
+    float3 newColor = _QuarterCloudColor.SampleLevel(
+        sampler_linear_clamp, float3(quarterUV, id.z), 0);
+    float newAlpha = _QuarterCloudAlpha.SampleLevel(
         sampler_linear_clamp, float3(quarterUV, id.z), 0);
 
     int2 nearestQuarter = int2(round(quarterCoord));
@@ -81,7 +86,8 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
 
     //No Cloud
     if (cloudDist < 1) {
-        _CloudBuffer[id.xyz] = newSample;
+        _CloudColorBuffer[id.xyz] = newColor;
+        _CloudAlphaBuffer[id.xyz] = newAlpha;
         return;
     }
 
@@ -92,15 +98,18 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     bool   reprojValid;
     float2 prevUV = ProjectToPrevUV(worldPosPrev, id.z, reprojValid);
     if (!reprojValid) {
-        _CloudBuffer[id.xyz] = newSample;
+        _CloudColorBuffer[id.xyz] = newColor;
+        _CloudAlphaBuffer[id.xyz] = newAlpha;
         return;
     }
 
-    float4 history = _HistoryBuffer.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
+    float3 historyColor = _HistoryColor.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
+    float  historyAlpha = _HistoryAlpha.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
 
     //Dont overdo new sample or you just get bisampling again. Dont underdo or you just get reprojection
-    float4 result = lerp(history, newSample, HISTORY_BLEND);
-    result.a = saturate(result.a);
+    float3 resultColor = lerp(historyColor, newColor, HISTORY_BLEND);
+    float  resultAlpha = saturate(lerp(historyAlpha, newAlpha, HISTORY_BLEND));
 
-    _CloudBuffer[id.xyz] = result;
+    _CloudColorBuffer[id.xyz] = resultColor;
+    _CloudAlphaBuffer[id.xyz] = resultAlpha;
 }
