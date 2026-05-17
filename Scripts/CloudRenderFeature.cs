@@ -28,7 +28,13 @@ public class CloudRendererFeature : ScriptableRendererFeature
         _pass.UpdateLightning(Manager.Lightnings);
         _pass.BlueNoiseTexture = Manager.BlueNoise;
         _pass.DetailRenderTexture = Manager.DetailRenderTexture;
-        _pass.CurFrameMovement = Manager.GetMovementOffset();
+        const float ShapeTiling = 0.00001f;
+        Vector3 m = Manager.GetMovementOffset();
+        Vector3 s = Manager.Scale;
+        _pass.CloudWorldMotion = new Vector3(
+            m.x / (ShapeTiling * Mathf.Max(s.x, 1e-4f)),
+            m.y / (ShapeTiling * Mathf.Max(s.y, 1e-4f)),
+            m.z / (ShapeTiling * Mathf.Max(s.z, 1e-4f)));
         Bounds CloudBounds = new Bounds();
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;

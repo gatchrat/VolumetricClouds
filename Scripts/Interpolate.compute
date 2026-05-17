@@ -1,59 +1,106 @@
 #pragma kernel TemporalUpscaling
 
-Texture2DArray<float4>   _QuarterCloudBuffer;   // current frame's quarter-res raymarch
-Texture2DArray<float4>   _HistoryBuffer;        // previous frame's full-res result (read)
-RWTexture2DArray<float4> _CloudBuffer;          // current frame's full-res result (write)
-Texture2DArray<float>    _CloudDepthTex;        // quarter-res encoded cloud depth
-Texture2DArray<float>    _DepthTex;             // full-res scene depth
-float4   _CameraPos[2];   
-float4x4 _CurrInvViewProj[2]; // (P * V)^-1 for current frame
-float4x4 _PrevViewProj[2];    // P * V for previous frame
-float4x4 _CurrViewProj[2];
-float2   _Resolution;
-float2  _QuarterResolution;
-float3  MovementOffset;
-uint    _FrameIndex;
-int _BigDivider;
-float4  _ZBufferParams;
-SamplerState    sampler_linear_clamp;
-SamplerState    sampler_bilinear_clamp;
-SamplerState    sampler_trilinear_clamp;
-SamplerState    sampler_point_clamp;
+//Based on:
+//https://www.vertexfragment.com/ramblings/volumetric-cloud-upsampling/?utm_source=chatgpt.com#how-to-upsample-and-have-it-not-look-bad
+//https://gamedev.net/forums/topic/698511-temporal-reprojection-on-volumetric-cloud-rendering/
+//+1 Website that got shutdown after i read it :D
 
-float LinearEyeDepth(float d) {
-    return 1.0 / (_ZBufferParams.z * d + _ZBufferParams.w);
+Texture2DArray<float4>   _QuarterCloudBuffer;   // current frame, quarter-res raymarch result
+Texture2DArray<float4>   _HistoryBuffer;        // previous frame, full-res result
+RWTexture2DArray<float4> _CloudBuffer;          // current frame, full-res output
+Texture2DArray<float>    _CloudDepthTex;        // quarter-res cloud world distance 
+
+float4   _CameraPos[2];
+float4x4 _CameraToWorldPerEye[2];
+float4x4 _CameraInvProjPerEye[2];
+float4x4 _PrevViewProj[2];
+
+float2 _Resolution;         
+float2 _QuarterResolution;   
+float3 _CloudWorldMotion;
+uint   _FrameIndex;
+int    _BigDivider;          // 4 / 8 / 16
+uint   _FlipY;               // matches RayMarcher convention
+
+SamplerState sampler_linear_clamp;
+SamplerState sampler_point_clamp;
+
+static const float HISTORY_BLEND        = 0.1;  // new-sample weight when history is valid default = 0.1
+
+//Keep same as raymarch
+float3 GenerateRayDir(uint2 pixelCoord, uint eyeIndex) {
+    float2 uv = (float2(pixelCoord) + 0.5) / _Resolution;
+    if (_FlipY == 1)
+    uv.y = 1.0 - uv.y;
+    float2 ndc = uv * 2.0 - 1.0;
+    float4 clip = float4(ndc, 1.0, 1.0);
+    float4 view = mul(_CameraInvProjPerEye[eyeIndex], clip);
+    view.xyz /= view.w;
+    float3 worldPos = mul(_CameraToWorldPerEye[eyeIndex], float4(view.xyz, 1.0)).xyz;
+    float3 camPos   = mul(_CameraToWorldPerEye[eyeIndex], float4(0, 0, 0, 1)).xyz;
+    return normalize(worldPos - camPos);
 }
 
-float3 ReconstructWorldPos(float2 uv, float deviceDepth, uint eyeIndex) {
-    float4 ndc = float4(uv * 2.0 - 1.0, deviceDepth, 1.0);
-    float4 worldPos = mul(_CurrInvViewProj[eyeIndex], ndc);
-    return worldPos.xyz / worldPos.w;
-}
-float3 GetRayDir(float2 uv, uint eyeIndex) {
-    float2 ndcXY    = float2(uv.x, 1.0 - uv.y) * 2.0 - 1.0; 
-    float4 ndc      = float4(ndcXY, 0.0, 1.0);               
-    float4 worldFar = mul(_CurrInvViewProj[eyeIndex], ndc);
-    return normalize(worldFar.xyz / worldFar.w - _CameraPos[eyeIndex].xyz);
+// World-space point -> previous frame UV. Evil Matrix Magic
+float2 ProjectToPrevUV(float3 worldPos, uint eyeIndex, out bool valid) {
+    float4 prevClip = mul(_PrevViewProj[eyeIndex], float4(worldPos, 1.0));
+    if (prevClip.w <= 0.0) {
+        valid = false;
+        return float2(-1, -1);
+    }
+    float3 prevNDC = prevClip.xyz / prevClip.w;
+    float2 prevUV  = prevNDC.xy * 0.5 + 0.5;
+    if (_FlipY == 1)
+    prevUV.y = 1.0 - prevUV.y;
+
+    valid = (prevUV.x >= 0.0 && prevUV.x <= 1.0 &&
+        prevUV.y >= 0.0 && prevUV.y <= 1.0);
+    return prevUV;
 }
 
 [numthreads(8, 8, 1)]
 void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
 
-    float2 fullUV       = (float2(id.xy) + 0.5) / _Resolution;
-    float frameOffset = _FrameIndex %(_BigDivider*_BigDivider);
-    float2 jitter = float2(frameOffset % _BigDivider, frameOffset / _BigDivider);
-    float2  quarterCoord = (id.xy-jitter) / _BigDivider;
-    float2 quarterUV    = (float2(quarterCoord) + 0.5) / _QuarterResolution;
+    uint  frameSlot = _FrameIndex % (uint)(_BigDivider * _BigDivider);
+    int2  jitter    = int2(frameSlot % (uint)_BigDivider,
+        frameSlot / (uint)_BigDivider);
 
-    float4 newSample      =  _QuarterCloudBuffer.SampleLevel(sampler_trilinear_clamp, float3(quarterUV, id.z), 0);
-    float  cloudWorldDist  = _CloudDepthTex.SampleLevel(sampler_point_clamp,  float3(quarterUV, id.z), 0).r;
+    float2 quarterCoord = (float2(id.xy) - float2(jitter)) / float(_BigDivider);
+    float2 quarterUV    = (quarterCoord + 0.5) / _QuarterResolution;
 
-    if (cloudWorldDist < 0.1) {
-        _CloudBuffer[id.xyz] = float4(0, 0, 0, 0);
+    float4 newSample = _QuarterCloudBuffer.SampleLevel(
+        sampler_linear_clamp, float3(quarterUV, id.z), 0);
+
+    int2 nearestQuarter = int2(round(quarterCoord));
+    nearestQuarter = clamp(nearestQuarter,
+        int2(0, 0),
+        int2((int)_QuarterResolution.x - 1,
+            (int)_QuarterResolution.y - 1));
+    float cloudDist = _CloudDepthTex.Load(int4(nearestQuarter, (int)id.z, 0)).r;
+
+    //No Cloud
+    if (cloudDist < 1) {
+        _CloudBuffer[id.xyz] = newSample;
         return;
     }
 
-    _CloudBuffer[id.xyz] = newSample;
-    return;
+    float3 rayDir   = GenerateRayDir(id.xy, id.z);
+    float3 worldPos = _CameraPos[id.z].xyz + rayDir * cloudDist;
+    float3 worldPosPrev = worldPos + _CloudWorldMotion;
+
+    bool   reprojValid;
+    float2 prevUV = ProjectToPrevUV(worldPosPrev, id.z, reprojValid);
+    if (!reprojValid) {
+        _CloudBuffer[id.xyz] = newSample;
+        return;
+    }
+
+    float4 history = _HistoryBuffer.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
+
+    //Dont overdo new sample or you just get bisampling again. Dont underdo or you just get reprojection
+    float4 result = lerp(history, newSample, HISTORY_BLEND);
+    result.a = saturate(result.a);
+
+    _CloudBuffer[id.xyz] = result;
 }

@@ -13,7 +13,7 @@ public class CloudRenderPass : ScriptableRenderPass
     private ComputeShader MergeShader;
     public int lightningCount;
     public Bounds Bounds;
-    public float3 CurFrameMovement;
+    public Vector3 CloudWorldMotion;
     private int _raymarchKernel;
     private int _upscaleKernel;
     private int _mergeKernel;
@@ -72,7 +72,7 @@ public class CloudRenderPass : ScriptableRenderPass
         EnsureArray(ref _quarterCloudArray, ref _quarterCloudArrayHandle,
                     qWidth, qHeight, RenderTextureFormat.ARGBHalf);
         EnsureArray(ref _quarterDepthArray, ref _quarterDepthArrayHandle,
-                    qWidth, qHeight, RenderTextureFormat.R8);
+                    qWidth, qHeight, RenderTextureFormat.RHalf);
         EnsureArray(ref _fullCloudArrays[0], ref _fullCloudArrayHandles[0],
                     fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
         EnsureArray(ref _fullCloudArrays[1], ref _fullCloudArrayHandles[1],
@@ -150,7 +150,7 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
         public Matrix4x4[] cameraToWorld;         // [2]
         public Matrix4x4[] cameraInverseProjection; // [2]
         public Vector4[] cameraPosPerEye;       // [2]
-        public Vector3 CurFrameMovement;
+        public Vector3 cloudWorldMotion;
         public int flipY;
     }
 
@@ -223,7 +223,7 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
             data.upscaleKernel = _upscaleKernel;
             data.mergeKernel = _mergeKernel;
             data.bounds = Bounds;
-            data.CurFrameMovement = CurFrameMovement;
+            data.cloudWorldMotion = CloudWorldMotion;
             data.flipY = _flipY;
             data.fullWidth = fullWidth;
             data.fullHeight = fullHeight;
@@ -290,20 +290,20 @@ fullWidth, fullHeight, RenderTextureFormat.ARGBHalf);
                 cmd.DispatchCompute(d.shader, d.raymarchKernel, qGroupsX, qGroupsY, 2);
 
                 //////////////////////////////////////TAA/////////////////////////////////////////////
-                cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CurrInvViewProj", d.currInvViewProj);
-                cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CurrViewProj", d.currViewProj);
+                cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CameraToWorldPerEye", d.cameraToWorld);
+                cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CameraInvProjPerEye", d.cameraInverseProjection);
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_PrevViewProj", d.prevViewProj);
                 cmd.SetComputeVectorArrayParam(d.upscaleShader, "_CameraPos", d.cameraPosPerEye);
                 cmd.SetComputeIntParam(d.upscaleShader, "_BigDivider", BigDivider);
                 cmd.SetComputeIntParam(d.upscaleShader, "_FrameIndex", Time.frameCount);
+                cmd.SetComputeIntParam(d.upscaleShader, "_FlipY", d.flipY);
                 cmd.SetComputeVectorParam(d.upscaleShader, "_QuarterResolution", new Vector2(d.quarterWidth, d.quarterHeight));
                 cmd.SetComputeVectorParam(d.upscaleShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
-                cmd.SetComputeVectorParam(d.upscaleShader, "MovementOffset", d.CurFrameMovement);
+                cmd.SetComputeVectorParam(d.upscaleShader, "_CloudWorldMotion", d.cloudWorldMotion);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_HistoryBuffer", d.historyBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudBuffer", d.fullCloudBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudBuffer", d.quarterCloudBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudDepthTex", d.quarterDepthBuffer);
-                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_DepthTex", d.depthBuffer);
 
                 int groupsX = Mathf.CeilToInt(d.fullWidth / 8f);
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
