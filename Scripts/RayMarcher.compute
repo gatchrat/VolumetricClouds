@@ -176,9 +176,6 @@ float GetCloudDensity(float3 WorldPos, float MipMap) {
     float ShapeWorley = ShapeNoise.x;
     float ShapePerlin = ShapeNoise.y;
 
-    float3 DetailNoisePos = ShapeNoisePos*10.0;
-    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
-
     float heightInShell = saturate((dist - SHELL_INNER) / SHELL_THICKNESS);
     float height = heightInShell * CLOUD_TOP;
     float topHeight = Adjusted_Top;
@@ -195,6 +192,9 @@ float GetCloudDensity(float3 WorldPos, float MipMap) {
     Density = RemapRange(Density, 1.0 - adjCloudCoverage, 1.0, 0.0, 1.0);
     Density *= heightFade;
     Density *= cloudCoverage;
+    if (Density < 0.02) return 0;
+    float3 DetailNoisePos = ShapeNoisePos*10.0;
+    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
     float sharpDetail = DetailNoise * DetailNoise; 
     Density = RemapRange(Density, 0.5 * sharpDetail * noiseScale, 1.0, 0.0, 1.0);
     return Density;
