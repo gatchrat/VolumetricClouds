@@ -1,4 +1,5 @@
 #pragma kernel TemporalUpscaleAndMerge
+#define  RENDERTARGETMODE 2
 
 //Based on:
 //https://www.vertexfragment.com/ramblings/volumetric-cloud-upsampling/?utm_source=chatgpt.com#how-to-upsample-and-have-it-not-look-bad
@@ -15,9 +16,15 @@ RWTexture2DArray<float3> _CloudColorBuffer;     // current frame, full-res outpu
 RWTexture2DArray<float>  _CloudAlphaBuffer;     // current frame, full-res output alpha
 Texture2DArray<float>    _CloudDepthTex;        // quarter-res cloud world distance
 
-Texture2DArray<float4>   _SrcTex;               // camera color before cloud
+#if RENDERTARGETMODE == 1
+Texture2DArray<float4>   _SrcTex;               
 Texture2DArray<float>    _DepthTex;             // scene depth (sky == 0)
-RWTexture2DArray<float4> _OutputTex;            // composited final result (blitted to cameraColor after)
+RWTexture2DArray<float4> _OutputTex;            
+#else 
+Texture2D<float4>   _SrcTex;               
+Texture2D<float>    _DepthTex;             // scene depth (sky == 0)
+RWTexture2D<float4> _OutputTex; 
+#endif
 
 float4   _CameraPos[2];
 float4x4 _CameraToWorldPerEye[2];
@@ -68,8 +75,14 @@ float2 ProjectToPrevUV(float3 worldPos, uint eyeIndex, out bool valid) {
 }
 
 void CompositeAndWriteOutput(uint3 id, float3 resultColor, float resultAlpha) {
+#if RENDERTARGETMODE == 1
     float4 src = _SrcTex[uint3(id.xy, id.z)];
-    float  depth = _DepthTex[uint3(id.xy, id.z)];
+    float  depth = _DepthTex[uint3(id.xy, id.z)];          
+#else 
+    float4 src = _SrcTex[uint2(id.xy)];
+    float  depth = _DepthTex[uint2(id.xy)];
+#endif
+
     float4 outColor = src;
 
     bool isSkyPixel = depth == 0;
@@ -80,8 +93,11 @@ void CompositeAndWriteOutput(uint3 id, float3 resultColor, float resultAlpha) {
         outColor.rgb = lerp(src.rgb, resultColor, a);
         outColor.a = 1.0;
     }
-
-    _OutputTex[uint3(id.xy, id.z)] = outColor;
+#if RENDERTARGETMODE == 1
+    _OutputTex[uint3(id.xy, id.z)] = outColor;      
+#else 
+    _OutputTex[uint2(id.xy)] = outColor;
+#endif
 }
 
 [numthreads(8, 8, 1)]

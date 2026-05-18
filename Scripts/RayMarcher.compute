@@ -1,5 +1,7 @@
 #pragma kernel CloudRaymarch
 
+#define  RENDERTARGETMODE 2
+
 Texture3D<float2> ShapeTexture;
 Texture3D<float> DetailTexture;
 Texture2D<float4> BlueNoise;
@@ -11,8 +13,14 @@ float4x4 _CurrViewProj[2];
 
 RWTexture2DArray<float3> _CloudColorBuffer;
 RWTexture2DArray<float>  _CloudAlphaBuffer;
-Texture2DArray<float>    _DepthTex;
+
 RWTexture2DArray<float>  _CloudDepthTex;
+#if RENDERTARGETMODE == 1
+Texture2DArray<float>    _DepthTex;
+#else 
+
+Texture2D<float>    _DepthTex;
+#endif
 
 float2 _Resolution;
 float2 _FullResolution;
@@ -241,7 +249,7 @@ bool GetLightSourceDirection(float3 WorldPos, out float3 Dir,out float dist) {
     return false;
 }
 //Mostly Doom based
-float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise, int eyeIndex) {
+float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
     int numShadowSteps = 6;
     float VdotL = dot(viewDir,SunDirection);//TODO Atteniate based on how much of color is suncolor
 
@@ -406,6 +414,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
 
+#if RENDERTARGETMODE == 1
     if(_DepthTex[uint3(FullResPixel, id.z)] >0.1) {
         _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
         _CloudAlphaBuffer[id.xyz] = 1;
@@ -425,7 +434,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float depth = 0;
 
     float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
-    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise, id.z);
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise);
     if(result.w > 0) {
         _CloudColorBuffer[id.xyz] = result.rgb;
         _CloudAlphaBuffer[id.xyz] = result.w;
@@ -435,4 +444,36 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         _CloudAlphaBuffer[id.xyz] = 0;
         _CloudDepthTex[id.xyz] =0;
     }
+#else 
+    // Level 2: cbuffer layout. Encode raw cbuffer values as a color.
+    if(_DepthTex[uint2(FullResPixel)] >0.1) {
+        _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
+        _CloudAlphaBuffer[id.xyz] = 1;
+        _CloudDepthTex[id.xyz] = 0;
+
+        return;
+    }
+    Ray ray = GenerateRay(FullResPixel,0);
+    float2 intersection = IntersectCloudShell(ray);
+
+    if (intersection.x < 0 || intersection.y < intersection.x) {
+        _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
+        _CloudAlphaBuffer[id.xyz] = 1;
+        _CloudDepthTex[id.xyz] = 0;
+        return;
+    }
+    float depth = 0;
+
+    float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise);
+    if(result.w > 0) {
+        _CloudColorBuffer[id.xyz] = result.rgb;
+        _CloudAlphaBuffer[id.xyz] = result.w;
+        _CloudDepthTex[id.xyz] = depth;
+    }else {
+        _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
+        _CloudAlphaBuffer[id.xyz] = 0;
+        _CloudDepthTex[id.xyz] =0;
+    }
+#endif
 }

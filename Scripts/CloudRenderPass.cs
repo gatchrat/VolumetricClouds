@@ -20,8 +20,6 @@ public class CloudRenderPass : ScriptableRenderPass
     public Texture2D BlueNoiseTexture;
     private CloudSettings _lastSettings;
 
-    // (depth=2, one slice per eye) ───────────────────
-
     private RenderTexture _quarterCloudColor;
     private RenderTexture _quarterCloudAlpha;
     private RenderTexture _quarterDepthArray;
@@ -46,7 +44,7 @@ public class CloudRenderPass : ScriptableRenderPass
     private RTHandle _blueNoiseHandle;
     private static readonly int _flipY = SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
-    private void EnsureBuffers(int fullWidth, int fullHeight)
+    private void EnsureBuffers(int fullWidth, int fullHeight, int eyeCount)
     {
         if (_blueNoiseHandle == null)
             _blueNoiseHandle = RTHandles.Alloc(BlueNoiseTexture);
@@ -54,15 +52,15 @@ public class CloudRenderPass : ScriptableRenderPass
         int qWidth = Mathf.CeilToInt(fullWidth / BigDivider);
         int qHeight = Mathf.CeilToInt(fullHeight / BigDivider);
 
-        void EnsureArray(ref RenderTexture rt, ref RTHandle handle, int w, int h, RenderTextureFormat fmt)
+        void EnsureArray(ref RenderTexture rt, ref RTHandle handle, int w, int h, RenderTextureFormat fmt, int eyeCount)
         {
-            if (rt != null && rt.width == w && rt.height == h) return;
+            if (rt != null && rt.width == w && rt.height == h && rt.volumeDepth == eyeCount) return;
             handle?.Release();
             rt?.Release();
             rt = new RenderTexture(w, h, 0, fmt)
             {
                 dimension = TextureDimension.Tex2DArray,
-                volumeDepth = 2,
+                volumeDepth = eyeCount,
                 enableRandomWrite = true,
                 useMipMap = false
             };
@@ -70,13 +68,13 @@ public class CloudRenderPass : ScriptableRenderPass
             handle = RTHandles.Alloc(rt);
         }
 
-        EnsureArray(ref _quarterCloudColor, ref _quarterCloudColorHandle, qWidth, qHeight, RenderTextureFormat.RGB111110Float);
-        EnsureArray(ref _quarterCloudAlpha, ref _quarterCloudAlphaHandle, qWidth, qHeight, RenderTextureFormat.RHalf);
-        EnsureArray(ref _quarterDepthArray, ref _quarterDepthArrayHandle, qWidth, qHeight, RenderTextureFormat.RHalf);
-        EnsureArray(ref _fullCloudColors[0], ref _fullCloudColorHandles[0], fullWidth, fullHeight, RenderTextureFormat.RGB111110Float);
-        EnsureArray(ref _fullCloudColors[1], ref _fullCloudColorHandles[1], fullWidth, fullHeight, RenderTextureFormat.RGB111110Float);
-        EnsureArray(ref _fullCloudAlphas[0], ref _fullCloudAlphaHandles[0], fullWidth, fullHeight, RenderTextureFormat.RHalf);
-        EnsureArray(ref _fullCloudAlphas[1], ref _fullCloudAlphaHandles[1], fullWidth, fullHeight, RenderTextureFormat.RHalf);
+        EnsureArray(ref _quarterCloudColor, ref _quarterCloudColorHandle, qWidth, qHeight, RenderTextureFormat.RGB111110Float, eyeCount);
+        EnsureArray(ref _quarterCloudAlpha, ref _quarterCloudAlphaHandle, qWidth, qHeight, RenderTextureFormat.RHalf, eyeCount);
+        EnsureArray(ref _quarterDepthArray, ref _quarterDepthArrayHandle, qWidth, qHeight, RenderTextureFormat.RHalf, eyeCount);
+        EnsureArray(ref _fullCloudColors[0], ref _fullCloudColorHandles[0], fullWidth, fullHeight, RenderTextureFormat.RGB111110Float, eyeCount);
+        EnsureArray(ref _fullCloudColors[1], ref _fullCloudColorHandles[1], fullWidth, fullHeight, RenderTextureFormat.RGB111110Float, eyeCount);
+        EnsureArray(ref _fullCloudAlphas[0], ref _fullCloudAlphaHandles[0], fullWidth, fullHeight, RenderTextureFormat.RHalf, eyeCount);
+        EnsureArray(ref _fullCloudAlphas[1], ref _fullCloudAlphaHandles[1], fullWidth, fullHeight, RenderTextureFormat.RHalf, eyeCount);
     }
 
     private ComputeBuffer _settingsBuffer;
@@ -127,9 +125,9 @@ public class CloudRenderPass : ScriptableRenderPass
         public Bounds bounds;
         public TextureHandle src;
         public TextureHandle dst;
-        public TextureHandle quarterCloudColor;   // Tex2DArray, 2 slices, 
-        public TextureHandle quarterCloudAlpha;   // Tex2DArray, 2 slices, 
-        public TextureHandle quarterDepthBuffer;  // Tex2DArray, 2 slices
+        public TextureHandle quarterCloudColor;
+        public TextureHandle quarterCloudAlpha;
+        public TextureHandle quarterDepthBuffer;
         public TextureHandle depthBuffer;
         public TextureHandle blueNoiseHandle;
         public Vector3 SunPos;
@@ -137,16 +135,16 @@ public class CloudRenderPass : ScriptableRenderPass
         public GraphicsBuffer lightningBuffer;
         public int fullWidth, fullHeight;
         public int quarterWidth, quarterHeight;
-        public TextureHandle historyColor;        // Tex2DArray, 2 slices,
-        public TextureHandle historyAlpha;        // Tex2DArray, 2 slices, 
-        public TextureHandle fullCloudColor;      // Tex2DArray, 2 slices, 
-        public TextureHandle fullCloudAlpha;      // Tex2DArray, 2 slices, 
-        public Matrix4x4[] prevViewProj;          // [2]
-        public Matrix4x4[] currViewProj;          // [2]
-        public Matrix4x4[] currInvViewProj;       // [2]
-        public Matrix4x4[] cameraToWorld;         // [2]
-        public Matrix4x4[] cameraInverseProjection; // [2]
-        public Vector4[] cameraPosPerEye;       // [2]
+        public TextureHandle historyColor;
+        public TextureHandle historyAlpha;
+        public TextureHandle fullCloudColor;
+        public TextureHandle fullCloudAlpha;
+        public Matrix4x4[] prevViewProj;
+        public Matrix4x4[] currViewProj;
+        public Matrix4x4[] currInvViewProj;
+        public Matrix4x4[] cameraToWorld;
+        public Matrix4x4[] cameraInverseProjection;
+        public Vector4[] cameraPosPerEye;
         public Vector3 cloudWorldMotion;
         public int flipY;
     }
@@ -164,14 +162,15 @@ public class CloudRenderPass : ScriptableRenderPass
         var cam = cameraData.camera;
         bool isXR = cameraData.xr.enabled;
 
-        // ── Collect both eyes' matrices in one call ────────────────────────
-        var viewProj = new Matrix4x4[2];
-        var invViewProj = new Matrix4x4[2];
-        var camToWorld = new Matrix4x4[2];
-        var invGpuProj = new Matrix4x4[2];
-        var camPos = new Vector4[2];
+        int eyeCount = isXR ? 2 : 1;
 
-        for (int eye = 0; eye < 2; eye++)
+        var viewProj = new Matrix4x4[eyeCount];
+        var invViewProj = new Matrix4x4[eyeCount];
+        var camToWorld = new Matrix4x4[eyeCount];
+        var invGpuProj = new Matrix4x4[eyeCount];
+        var camPos = new Vector4[eyeCount];
+
+        for (int eye = 0; eye < eyeCount; eye++)
         {
             var stereoEye = eye == 0 ? Camera.StereoscopicEye.Left : Camera.StereoscopicEye.Right;
 
@@ -191,9 +190,8 @@ public class CloudRenderPass : ScriptableRenderPass
         int qWidth = Mathf.CeilToInt(fullWidth / BigDivider);
         int qHeight = Mathf.CeilToInt(fullHeight / BigDivider);
 
-        EnsureBuffers(fullWidth, fullHeight);
+        EnsureBuffers(fullWidth, fullHeight, eyeCount);
 
-        // ── Single ping-pong (both eyes live in one Tex2DArray) ───────────
         int prevPing = _currentBuffer;
         int currPing = 1 - prevPing;
         _currentBuffer = currPing;
@@ -204,8 +202,8 @@ public class CloudRenderPass : ScriptableRenderPass
             enableRandomWrite = true,
             name = "CloudOutput",
             clearBuffer = false,
-            dimension = TextureDimension.Tex2DArray,
-            slices = 2
+            dimension = eyeCount == 2 ? TextureDimension.Tex2DArray : TextureDimension.Tex2D,
+            slices = eyeCount
         };
         TextureHandle dst = renderGraph.CreateTexture(desc);
 
@@ -228,11 +226,10 @@ public class CloudRenderPass : ScriptableRenderPass
             data.cameraToWorld = camToWorld;
             data.cameraInverseProjection = invGpuProj;
             data.cameraPosPerEye = camPos;
-            data.prevViewProj = _prevViewProj;  // previous frame, both eyes
+            data.prevViewProj = _prevViewProj;
             data.currViewProj = viewProj;
             data.currInvViewProj = invViewProj;
 
-            // ── Import Tex2DArray handles ──────────────────────────────────
             data.blueNoiseHandle = renderGraph.ImportTexture(_blueNoiseHandle);
             data.quarterCloudColor = renderGraph.ImportTexture(_quarterCloudColorHandle);
             data.quarterCloudAlpha = renderGraph.ImportTexture(_quarterCloudAlphaHandle);
@@ -287,7 +284,7 @@ public class CloudRenderPass : ScriptableRenderPass
 
                 int qGroupsX = Mathf.CeilToInt(d.quarterWidth / 8f);
                 int qGroupsY = Mathf.CeilToInt(d.quarterHeight / 8f);
-                cmd.DispatchCompute(d.shader, d.raymarchKernel, qGroupsX, qGroupsY, 2);
+                cmd.DispatchCompute(d.shader, d.raymarchKernel, qGroupsX, qGroupsY, eyeCount);
 
                 //////////// Upscale and Merge////////////
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CameraToWorldPerEye", d.cameraToWorld);
@@ -313,7 +310,7 @@ public class CloudRenderPass : ScriptableRenderPass
 
                 int groupsX = Mathf.CeilToInt(d.fullWidth / 8f);
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
-                cmd.DispatchCompute(d.upscaleShader, d.upscaleKernel, groupsX, groupsY, 2);
+                cmd.DispatchCompute(d.upscaleShader, d.upscaleKernel, groupsX, groupsY, eyeCount);
             });
 
             // Store both eyes' VP for next frame AFTER the pass is set up
@@ -337,7 +334,7 @@ public class CloudRenderPass : ScriptableRenderPass
         _quarterCloudColorHandle?.Release(); _quarterCloudColor?.Release();
         _quarterCloudAlphaHandle?.Release(); _quarterCloudAlpha?.Release();
         _quarterDepthArrayHandle?.Release(); _quarterDepthArray?.Release();
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < _fullCloudColorHandles.Length; i++)
         {
             _fullCloudColorHandles[i]?.Release();
             _fullCloudColors[i]?.Release();
