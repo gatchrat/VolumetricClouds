@@ -241,7 +241,8 @@ public class CloudRenderPass : ScriptableRenderPass
             data.historyAlpha = renderGraph.ImportTexture(_fullCloudAlphaHandles[prevPing]);
             data.fullCloudColor = renderGraph.ImportTexture(_fullCloudColorHandles[currPing]);
             data.fullCloudAlpha = renderGraph.ImportTexture(_fullCloudAlphaHandles[currPing]);
-            data.depthBuffer = resourceData.cameraDepthTexture;
+
+            data.depthBuffer = resourceData.activeDepthTexture;
             data.src = resourceData.cameraColor;
             data.dst = dst;
 
