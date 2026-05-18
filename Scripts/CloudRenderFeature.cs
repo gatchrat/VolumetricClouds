@@ -39,6 +39,7 @@ public class CloudRendererFeature : ScriptableRendererFeature
         CloudBounds.size = Manager.CloudsBounds.localScale;
         CloudBounds.center = Manager.CloudsBounds.localPosition;
         _pass.Bounds = CloudBounds;
+        _pass.ConfigureInput(ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Depth);
         switch (Manager.upscalingMode)
         {
             case UpscalingMode.None:
@@ -59,7 +60,6 @@ public class CloudRendererFeature : ScriptableRendererFeature
         }
         if (Manager.EnableClouds)
         {
-
             renderer.EnqueuePass(_pass);
         }
     }

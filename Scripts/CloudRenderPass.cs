@@ -209,8 +209,6 @@ public class CloudRenderPass : ScriptableRenderPass
         };
         TextureHandle dst = renderGraph.CreateTexture(desc);
 
-
-
         using (var builder = renderGraph.AddComputePass<PassData>("Cloud Raymarch + Upscale + Merge", out var data))
         {
             data.shader = _shader;
@@ -276,7 +274,6 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMin", d.bounds.min);
                 cmd.SetComputeVectorParam(d.shader, "_BoundsMax", d.bounds.max);
                 cmd.SetComputeVectorParam(d.shader, "SunPostion", d.SunPos);
-                cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudColorBuffer", d.quarterCloudColor);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudAlphaBuffer", d.quarterCloudAlpha);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "BlueNoise", d.blueNoiseHandle);
@@ -309,7 +306,6 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudColor", d.quarterCloudColor);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudAlpha", d.quarterCloudAlpha);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudDepthTex", d.quarterDepthBuffer);
-                // Inputs/outputs that used to live on the separate merge pass:
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_SrcTex", d.src);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_OutputTex", d.dst);

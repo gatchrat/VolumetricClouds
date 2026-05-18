@@ -13,7 +13,6 @@ RWTexture2DArray<float3> _CloudColorBuffer;
 RWTexture2DArray<float>  _CloudAlphaBuffer;
 Texture2DArray<float>    _DepthTex;
 RWTexture2DArray<float>  _CloudDepthTex;
-Texture2DArray<float4>   _SrcTex;
 
 float2 _Resolution;
 float2 _FullResolution;
@@ -303,9 +302,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             //SUN
             float3 sunDir = SunDirection;
 
-            int adaptiveShadowSteps = transmittance > 0.7 ? numShadowSteps :
-            transmittance > 0.4 ? 4 :
-            transmittance > 0.15 ? 2 : 1;
+            int adaptiveShadowSteps = numShadowSteps;
 
             for(int i=0;i<adaptiveShadowSteps;++i) {
                 samplePosShadow += ShadowStepSize*sunDir;
@@ -409,7 +406,6 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
 
-    float4 sceneColor = _SrcTex[uint3(FullResPixel, id.z)];
     if(_DepthTex[uint3(FullResPixel, id.z)] >0.1) {
         _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
         _CloudAlphaBuffer[id.xyz] = 1;
@@ -431,10 +427,6 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
     float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise, id.z);
     if(result.w > 0) {
-        //  if(result.w < 0.07) result.w = result.w * result.w;
-        sceneColor.w = 1-result.w;
-        float4 finalColor = result*result.w+sceneColor*sceneColor.w; //Transmittance is basicly alpha value. Cant look through my monitor -> use scene as background
-        finalColor.w = 1; //just to be sure and not accidentaly scale the whole color by some alpha
         _CloudColorBuffer[id.xyz] = result.rgb;
         _CloudAlphaBuffer[id.xyz] = result.w;
         _CloudDepthTex[id.xyz] = depth;
