@@ -1,9 +1,11 @@
-#pragma kernel TemporalUpscaling
+#pragma kernel TemporalUpscaleAndMerge
 
 //Based on:
 //https://www.vertexfragment.com/ramblings/volumetric-cloud-upsampling/?utm_source=chatgpt.com#how-to-upsample-and-have-it-not-look-bad
 //https://gamedev.net/forums/topic/698511-temporal-reprojection-on-volumetric-cloud-rendering/
 //+1 Website that got shutdown after i read it :D
+
+//Also merges to output
 
 Texture2DArray<float3>   _QuarterCloudColor;    // current frame, quarter-res raymarch RGB
 Texture2DArray<float>    _QuarterCloudAlpha;    // current frame, quarter-res raymarch alpha
@@ -13,13 +15,17 @@ RWTexture2DArray<float3> _CloudColorBuffer;     // current frame, full-res outpu
 RWTexture2DArray<float>  _CloudAlphaBuffer;     // current frame, full-res output alpha
 Texture2DArray<float>    _CloudDepthTex;        // quarter-res cloud world distance
 
+Texture2DArray<float4>   _SrcTex;               // camera color before cloud
+Texture2DArray<float>    _DepthTex;             // scene depth (sky == 0)
+RWTexture2DArray<float4> _OutputTex;            // composited final result (blitted to cameraColor after)
+
 float4   _CameraPos[2];
 float4x4 _CameraToWorldPerEye[2];
 float4x4 _CameraInvProjPerEye[2];
 float4x4 _PrevViewProj[2];
 
-float2 _Resolution;         
-float2 _QuarterResolution;   
+float2 _Resolution;
+float2 _QuarterResolution;
 float3 _CloudWorldMotion;
 uint   _FrameIndex;
 int    _BigDivider;          // 4 / 8 / 16
@@ -61,8 +67,25 @@ float2 ProjectToPrevUV(float3 worldPos, uint eyeIndex, out bool valid) {
     return prevUV;
 }
 
+void CompositeAndWriteOutput(uint3 id, float3 resultColor, float resultAlpha) {
+    float4 src = _SrcTex[uint3(id.xy, id.z)];
+    float  depth = _DepthTex[uint3(id.xy, id.z)];
+    float4 outColor = src;
+
+    bool isSkyPixel = depth == 0;
+    float a = saturate(resultAlpha);
+    a *= a;
+
+    if (a > 0.0001 && isSkyPixel) {
+        outColor.rgb = lerp(src.rgb, resultColor, a);
+        outColor.a = 1.0;
+    }
+
+    _OutputTex[uint3(id.xy, id.z)] = outColor;
+}
+
 [numthreads(8, 8, 1)]
-void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
+void TemporalUpscaleAndMerge(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
 
     uint  frameSlot = _FrameIndex % (uint)(_BigDivider * _BigDivider);
@@ -84,10 +107,11 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
             (int)_QuarterResolution.y - 1));
     float cloudDist = _CloudDepthTex.Load(int4(nearestQuarter, (int)id.z, 0)).r;
 
-    //No Cloud
+    //No Cloud — write fresh sample to history + composite (alpha is ~0 so src passes through).
     if (cloudDist < 1) {
         _CloudColorBuffer[id.xyz] = newColor;
         _CloudAlphaBuffer[id.xyz] = newAlpha;
+        CompositeAndWriteOutput(id, newColor, newAlpha);
         return;
     }
 
@@ -100,6 +124,7 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
     if (!reprojValid) {
         _CloudColorBuffer[id.xyz] = newColor;
         _CloudAlphaBuffer[id.xyz] = newAlpha;
+        CompositeAndWriteOutput(id, newColor, newAlpha);
         return;
     }
 
@@ -112,4 +137,5 @@ void TemporalUpscaling(uint3 id : SV_DispatchThreadID) {
 
     _CloudColorBuffer[id.xyz] = resultColor;
     _CloudAlphaBuffer[id.xyz] = resultAlpha;
+    CompositeAndWriteOutput(id, resultColor, resultAlpha);
 }

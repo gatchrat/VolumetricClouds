@@ -10,13 +10,11 @@ public class CloudRenderPass : ScriptableRenderPass
 {
     private ComputeShader _shader;
     private ComputeShader UpscaleShader;
-    private ComputeShader MergeShader;
     public int lightningCount;
     public Bounds Bounds;
     public Vector3 CloudWorldMotion;
     private int _raymarchKernel;
     private int _upscaleKernel;
-    private int _mergeKernel;
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
     public Texture2D BlueNoiseTexture;
@@ -115,10 +113,8 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         _shader = shader;
         UpscaleShader = upscaleShader;
-        MergeShader = mergeShader;
         _raymarchKernel = shader.FindKernel("CloudRaymarch");
-        _upscaleKernel = upscaleShader.FindKernel("TemporalUpscaling");
-        _mergeKernel = mergeShader.FindKernel("Merge");
+        _upscaleKernel = upscaleShader.FindKernel("TemporalUpscaleAndMerge");
         renderPassEvent = RenderPassEvent.AfterRenderingSkybox;
     }
 
@@ -126,10 +122,8 @@ public class CloudRenderPass : ScriptableRenderPass
     {
         public ComputeShader shader;
         public ComputeShader upscaleShader;
-        public ComputeShader mergeShader;
         public int raymarchKernel;
         public int upscaleKernel;
-        public int mergeKernel;
         public Bounds bounds;
         public TextureHandle src;
         public TextureHandle dst;
@@ -221,10 +215,8 @@ public class CloudRenderPass : ScriptableRenderPass
         {
             data.shader = _shader;
             data.upscaleShader = UpscaleShader;
-            data.mergeShader = MergeShader;
             data.raymarchKernel = _raymarchKernel;
             data.upscaleKernel = _upscaleKernel;
-            data.mergeKernel = _mergeKernel;
             data.bounds = Bounds;
             data.cloudWorldMotion = CloudWorldMotion;
             data.flipY = _flipY;
@@ -299,7 +291,7 @@ public class CloudRenderPass : ScriptableRenderPass
                 int qGroupsY = Mathf.CeilToInt(d.quarterHeight / 8f);
                 cmd.DispatchCompute(d.shader, d.raymarchKernel, qGroupsX, qGroupsY, 2);
 
-                //////////////////////////////////////TAA/////////////////////////////////////////////
+                //////////// Upscale and Merge////////////
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CameraToWorldPerEye", d.cameraToWorld);
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_CameraInvProjPerEye", d.cameraInverseProjection);
                 cmd.SetComputeMatrixArrayParam(d.upscaleShader, "_PrevViewProj", d.prevViewProj);
@@ -317,20 +309,14 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudColor", d.quarterCloudColor);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_QuarterCloudAlpha", d.quarterCloudAlpha);
                 cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_CloudDepthTex", d.quarterDepthBuffer);
+                // Inputs/outputs that used to live on the separate merge pass:
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_SrcTex", d.src);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_DepthTex", d.depthBuffer);
+                cmd.SetComputeTextureParam(d.upscaleShader, d.upscaleKernel, "_OutputTex", d.dst);
 
                 int groupsX = Mathf.CeilToInt(d.fullWidth / 8f);
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
                 cmd.DispatchCompute(d.upscaleShader, d.upscaleKernel, groupsX, groupsY, 2);
-
-                /////////////////////////////////////MERGE//////////////////////////////////////////////
-                cmd.SetComputeIntParam(d.mergeShader, "_FlipY", d.flipY);
-                cmd.SetComputeVectorParam(d.mergeShader, "_Resolution", new Vector2(d.fullWidth, d.fullHeight));
-                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudColorBuffer", d.fullCloudColor);
-                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_CloudAlphaBuffer", d.fullCloudAlpha);
-                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_DepthTex", d.depthBuffer);
-                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_SrcTex", d.src);
-                cmd.SetComputeTextureParam(d.mergeShader, d.mergeKernel, "_OutputTex", d.dst);
-                cmd.DispatchCompute(d.mergeShader, d.mergeKernel, groupsX, groupsY, 2);
             });
 
             // Store both eyes' VP for next frame AFTER the pass is set up
