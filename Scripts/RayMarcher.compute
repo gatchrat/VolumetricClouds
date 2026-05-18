@@ -154,18 +154,22 @@ int SelectMipForWorldPos(float3 Pos) {
     }
     return 3;
 }
-float GetCloudDensity(float3 WorldPos, float MipMap) {
+
+float ComputeAdjCloudCoverage(float cloudCoverage) {
+    const float cloudHeightScale     = 1.0;
+    const float minAdjCloudCoverage  = saturate(0.0127 / (cloudHeightScale + 0.153));
+    const float maxAdjCloudCoverage  = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
+    return lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
+}
+
+float GetCloudDensity(float3 WorldPos, float MipMap, float adjCloudCoverage) {
     // Inline shell check using the same sqrt we need anyway for heightInShell.
     // (Was: isInShell() did length(), then we did sqrt(dot(WorldPos,WorldPos))
     // again. One length() call here, reused below.)
     float dist = length(WorldPos);
     if (dist < SHELL_INNER || dist > SHELL_OUTER) return 0;
 
-    float cloudHeightScale = 1;
     float cloudCoverage = CloudDensity;
-    float minAdjCloudCoverage = saturate(0.0127 / (cloudHeightScale + 0.153));
-    float maxAdjCloudCoverage = saturate(0.125 / (cloudHeightScale + 0.146) - 0.069) + 1.0;
-    float adjCloudCoverage = lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
     float Adjusted_Bottom = CLOUD_BOTTOM;
     float Adjusted_Top = CLOUD_TOP;
 
@@ -263,6 +267,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float rayOffset = (Noise - 0.5) * 0.1 * CloudStepSize;
     viewPos += viewDir*rayOffset;
     float MipMap = SelectMipForWorldPos(viewPos);
+    float adjCloudCoverage = ComputeAdjCloudCoverage(CloudDensity);
     int steps = 0;
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax && steps < 10000) {
@@ -271,7 +276,17 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         if(samplePos.y-PLANET_THICKNESS <-10000) {
             break;
         }
-        float density = GetCloudDensity(samplePos,MipMap);
+
+        float stepSize;
+        if (BigSteps) {
+            stepSize = CloudStepSize * BigStepMultiplier;
+        } else {
+            stepSize = transmittance > 0.5 ? CloudStepSize :
+            transmittance > 0.2 ? CloudStepSize * 1.5 :
+            CloudStepSize * 2.5;
+        }
+
+        float density = GetCloudDensity(samplePos,MipMap,adjCloudCoverage);
         float shadowOpticalDepth = 0.0;
         float LightningOpticalDepth = 0.0;
         if(density > 0) {
@@ -279,7 +294,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             if(BigSteps) {
                 //revert big step and start small steps to find exact cloud start
                 BigSteps = false;
-                t-=CloudStepSize*BigStepMultiplier;
+                t -= stepSize;
                 continue;
             }
 
@@ -294,7 +309,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
             for(int i=0;i<adaptiveShadowSteps;++i) {
                 samplePosShadow += ShadowStepSize*sunDir;
-                float shadowDensity = GetCloudDensity(samplePosShadow,MipMap)*TransmittanceFalloff;
+                float shadowDensity = GetCloudDensity(samplePosShadow,MipMap,adjCloudCoverage)*TransmittanceFalloff;
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
                 prevShadowDensity = shadowDensity;
             }
@@ -302,7 +317,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             float sigE = betaE*density;
             float powder = 4.0*(1.0-exp(-2.0*density));
             float shadowTransmittance = exp(-shadowOpticalDepth);
-            float nextTransmittance = transmittance*exp(-sigE*CloudStepSize);
+
+            float nextTransmittance = transmittance*exp(-sigE*stepSize);
             float _dTr = transmittance-nextTransmittance;
             //LIGHTNING
             samplePosShadow = samplePos;
@@ -313,7 +329,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
                 for(int i=0;i<adaptiveShadowSteps;++i) {
                     samplePosShadow += ShadowStepSize*sunDir;
-                    float shadowDensity = GetCloudDensity(samplePosShadow,MipMap)*TransmittanceFalloff;
+                    float shadowDensity = GetCloudDensity(samplePosShadow,MipMap,adjCloudCoverage)*TransmittanceFalloff;
                     LightningOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
                     prevShadowDensity = shadowDensity;
                 }
@@ -339,11 +355,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             }
         }
 
-        if(BigSteps) {
-            t+=CloudStepSize*BigStepMultiplier;
-        }else {
-            t+=CloudStepSize;
-        }
+        t += stepSize;
     }
 
     const float anisotropyFront = 0.9;
