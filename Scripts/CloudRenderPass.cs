@@ -38,11 +38,30 @@ public class CloudRenderPass : ScriptableRenderPass
 
     public int BigDivider = 4;
 
-    // Both eyes' previous VP matrices stored each frame
-    private Matrix4x4[] _prevViewProj = new Matrix4x4[2];
+    // Per-eye matrix/vector arrays reused every frame to avoid GC allocations.
+    // _viewProjPing ping-pongs so the previous frame's VP survives without
+    // dropping the old array to the GC each frame.
+    private Matrix4x4[][] _viewProjPing = new Matrix4x4[2][];
+    private Matrix4x4[] _invViewProj;
+    private Matrix4x4[] _camToWorld;
+    private Matrix4x4[] _invGpuProj;
+    private Vector4[] _camPos;
+    private int _perEyeArraysEyeCount = -1;
 
     private RTHandle _blueNoiseHandle;
     private static readonly int _flipY = SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
+
+    private void EnsurePerEyeArrays(int eyeCount)
+    {
+        if (_perEyeArraysEyeCount == eyeCount) return;
+        _viewProjPing[0] = new Matrix4x4[eyeCount];
+        _viewProjPing[1] = new Matrix4x4[eyeCount];
+        _invViewProj = new Matrix4x4[eyeCount];
+        _camToWorld = new Matrix4x4[eyeCount];
+        _invGpuProj = new Matrix4x4[eyeCount];
+        _camPos = new Vector4[eyeCount];
+        _perEyeArraysEyeCount = eyeCount;
+    }
 
     private void EnsureBuffers(int fullWidth, int fullHeight, int eyeCount)
     {
@@ -57,6 +76,7 @@ public class CloudRenderPass : ScriptableRenderPass
             if (rt != null && rt.width == w && rt.height == h && rt.volumeDepth == eyeCount) return;
             handle?.Release();
             rt?.Release();
+            Debug.Log($"Creating RT {w}x{h}x{eyeCount} fmt {fmt}");
             rt = new RenderTexture(w, h, 0, fmt)
             {
                 dimension = TextureDimension.Tex2DArray,
@@ -79,6 +99,7 @@ public class CloudRenderPass : ScriptableRenderPass
 
     private ComputeBuffer _settingsBuffer;
     private GraphicsBuffer _LightningBuffer;
+    private readonly CloudSettings[] _settingsScratch = new CloudSettings[1];
 
     public void UpdateLightning(List<Lightning> Lightnings)
     {
@@ -90,8 +111,8 @@ public class CloudRenderPass : ScriptableRenderPass
                 Lightnings.Count,
                 System.Runtime.InteropServices.Marshal.SizeOf<Lightning>());
             lightningCount = Lightnings.Count;
+            _LightningBuffer.SetData(Lightnings);
         }
-        _LightningBuffer.SetData(Lightnings);
     }
 
     public void UpdateSettings(CloudSettings settings)
@@ -102,7 +123,8 @@ public class CloudRenderPass : ScriptableRenderPass
 
         if (!settings.Equals(_lastSettings))
         {
-            _settingsBuffer.SetData(new CloudSettings[] { settings });
+            _settingsScratch[0] = settings;
+            _settingsBuffer.SetData(_settingsScratch);
             _lastSettings = settings;
         }
     }
@@ -164,12 +186,19 @@ public class CloudRenderPass : ScriptableRenderPass
 
         int eyeCount = isXR ? 2 : 1;
 
-        var viewProj = new Matrix4x4[eyeCount];
-        var invViewProj = new Matrix4x4[eyeCount];
-        var camToWorld = new Matrix4x4[eyeCount];
-        var invGpuProj = new Matrix4x4[eyeCount];
-        var camPos = new Vector4[eyeCount];
+        int fullWidth = cameraData.cameraTargetDescriptor.width;
+        int fullHeight = cameraData.cameraTargetDescriptor.height;
+        int qWidth = Mathf.CeilToInt(fullWidth / BigDivider);
+        int qHeight = Mathf.CeilToInt(fullHeight / BigDivider);
 
+        EnsureBuffers(fullWidth, fullHeight, eyeCount);
+        EnsurePerEyeArrays(eyeCount);
+
+        int prevPing = _currentBuffer;
+        int currPing = 1 - prevPing;
+        _currentBuffer = currPing;
+
+        var currViewProj = _viewProjPing[currPing];
         for (int eye = 0; eye < eyeCount; eye++)
         {
             var stereoEye = eye == 0 ? Camera.StereoscopicEye.Left : Camera.StereoscopicEye.Right;
@@ -178,23 +207,14 @@ public class CloudRenderPass : ScriptableRenderPass
             Matrix4x4 proj = isXR ? cam.GetStereoProjectionMatrix(stereoEye) : cam.projectionMatrix;
             Matrix4x4 gpuProj = GL.GetGPUProjectionMatrix(proj, true);
 
-            viewProj[eye] = gpuProj * view;
-            invViewProj[eye] = viewProj[eye].inverse;
-            camToWorld[eye] = view.inverse;
-            invGpuProj[eye] = gpuProj.inverse;
-            camPos[eye] = view.inverse.GetColumn(3);
+            Matrix4x4 vp = gpuProj * view;
+            Matrix4x4 viewInv = view.inverse;
+            currViewProj[eye] = vp;
+            _invViewProj[eye] = vp.inverse;
+            _camToWorld[eye] = viewInv;
+            _invGpuProj[eye] = gpuProj.inverse;
+            _camPos[eye] = viewInv.GetColumn(3);
         }
-
-        int fullWidth = cameraData.cameraTargetDescriptor.width;
-        int fullHeight = cameraData.cameraTargetDescriptor.height;
-        int qWidth = Mathf.CeilToInt(fullWidth / BigDivider);
-        int qHeight = Mathf.CeilToInt(fullHeight / BigDivider);
-
-        EnsureBuffers(fullWidth, fullHeight, eyeCount);
-
-        int prevPing = _currentBuffer;
-        int currPing = 1 - prevPing;
-        _currentBuffer = currPing;
 
         TextureDesc desc = new TextureDesc(fullWidth, fullHeight)
         {
@@ -223,12 +243,12 @@ public class CloudRenderPass : ScriptableRenderPass
             data.settingsBuffer = _settingsBuffer;
             data.lightningBuffer = _LightningBuffer;
 
-            data.cameraToWorld = camToWorld;
-            data.cameraInverseProjection = invGpuProj;
-            data.cameraPosPerEye = camPos;
-            data.prevViewProj = _prevViewProj;
-            data.currViewProj = viewProj;
-            data.currInvViewProj = invViewProj;
+            data.cameraToWorld = _camToWorld;
+            data.cameraInverseProjection = _invGpuProj;
+            data.cameraPosPerEye = _camPos;
+            data.prevViewProj = _viewProjPing[prevPing];
+            data.currViewProj = _viewProjPing[currPing];
+            data.currInvViewProj = _invViewProj;
 
             data.blueNoiseHandle = renderGraph.ImportTexture(_blueNoiseHandle);
             data.quarterCloudColor = renderGraph.ImportTexture(_quarterCloudColorHandle);
@@ -312,9 +332,6 @@ public class CloudRenderPass : ScriptableRenderPass
                 int groupsY = Mathf.CeilToInt(d.fullHeight / 8f);
                 cmd.DispatchCompute(d.upscaleShader, d.upscaleKernel, groupsX, groupsY, eyeCount);
             });
-
-            // Store both eyes' VP for next frame AFTER the pass is set up
-            _prevViewProj = viewProj;
         }
 
         using (var builder = renderGraph.AddRasterRenderPass<PassData>("Cloud Blit Back", out var blitData))
@@ -334,7 +351,7 @@ public class CloudRenderPass : ScriptableRenderPass
         _quarterCloudColorHandle?.Release(); _quarterCloudColor?.Release();
         _quarterCloudAlphaHandle?.Release(); _quarterCloudAlpha?.Release();
         _quarterDepthArrayHandle?.Release(); _quarterDepthArray?.Release();
-        for (int i = 0; i < _fullCloudColorHandles.Length; i++)
+        for (int i = 0; i < 2; i++)
         {
             _fullCloudColorHandles[i]?.Release();
             _fullCloudColors[i]?.Release();
