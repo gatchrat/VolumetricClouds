@@ -37,7 +37,7 @@ public struct CloudSettings
     public float ShadowStepSize;
     public float _pad6;
     public float3 AmbientColor;
-    public float _pad7;
+    public float LightningIntensity;
 }
 
 public enum UpscalingMode
@@ -50,7 +50,7 @@ public enum UpscalingMode
 public class CloudManager : MonoBehaviour
 {
     [Header("Settings (Use Light settings color and intensity)")]
-    [Range(1f, 10f)]
+    [Range(0f, 10f)]
     public float BrightnesMultiplier = 1f;
     [Range(0.1f, 20f)]
     public float CloudSunBlocking = 1f;
@@ -91,6 +91,8 @@ public class CloudManager : MonoBehaviour
     public CloudSettings cloudSettings;
     private float3 CurFrameMovement;
     private float LightningTimer = 3f;
+
+    public float LightningTestIntensity = 30f;
     private int curLightningLayer = 0;
     private float flickerTimer = 0.1f;
     private List<int> LightningCounttLayer;
@@ -117,6 +119,8 @@ public class CloudManager : MonoBehaviour
         cloudSettings.CloudStepSize = CloudStepSize;
         cloudSettings.ShadowStepSize = ShadowStepSize;
         cloudSettings.AmbientColor = new Vector3(RenderSettings.ambientLight.r, RenderSettings.ambientLight.g, RenderSettings.ambientLight.b);
+        cloudSettings.LightningIntensity = LightningTestIntensity;
+
         if (Lightning)
         {
             handleLightning();

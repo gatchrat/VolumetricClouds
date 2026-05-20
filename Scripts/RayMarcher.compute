@@ -50,7 +50,7 @@ cbuffer _CloudSettings {
     float ShadowStepSize;
     float _pad6;
     float3 AmbientColor;
-    float _pad7;
+    float LightningIntensity;
 };
 
 struct Lightning {
@@ -224,32 +224,33 @@ float HGPhase(float cos_angle, float inG) {
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
-bool GetLightSourceDirection(float3 WorldPos, out float3 Dir,out float dist) {
-    float3 bestDelta    = SunDirection; 
-    float  bestDistSq   = LIGHTNING_MAX_DISTANCE * LIGHTNING_MAX_DISTANCE;
-    bool   hitAny       = false;
+// Finds the nearest point on any lightning segment.
+// Returns NORMALIZED direction from WorldPos toward that point, and the REAL
+// (non-squared) distance. Only returns true when a lightning is within
+// LIGHTNING_MAX_DISTANCE.
+bool GetNearestLightning(float3 WorldPos, out float3 LightDir, out float LightDist) {
+    LightDir  = float3(0, 1, 0);
+    LightDist = LIGHTNING_MAX_DISTANCE;
+    bool hitAny = false;
 
     for (uint i = 0; i < _LightningCount; i++) {
-        float3 LightningPos = Lightnings[i].origin;
-        float3 toPos  = WorldPos - LightningPos;
-        float  t      = clamp(dot(toPos, Lightnings[i].direction), 0.0, Lightnings[i].segmentLength);
-        float3 closest = LightningPos+ Lightnings[i].direction * t;
+        float3 lp  = Lightnings[i].origin;
+        float3 ld  = Lightnings[i].direction;
+        float  seg = Lightnings[i].segmentLength;
 
-        float3 delta  = closest - WorldPos;
-        float  distSq = dot(delta, delta);
+        float3 toPos   = WorldPos - lp;
+        float  t       = clamp(dot(toPos, ld), 0.0, seg);
+        float3 closest = lp + ld * t;
+        float3 delta   = closest - WorldPos;
+        float  d       = length(delta);
 
-        if (distSq < bestDistSq) {
-            bestDistSq = distSq;
-            bestDelta  = delta;
-            hitAny     = true;
+        if (d < LightDist) {
+            LightDist = d;
+            LightDir  = delta / max(d, 1.0);
+            hitAny    = true;
         }
     }
-    if(hitAny) {
-        Dir = bestDelta;
-        dist = bestDistSq;
-        return true;
-    }
-    return false;
+    return hitAny;
 }
 //Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
@@ -269,8 +270,6 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     //Stepping optimisation
     int stepsWithoutCloud = 0;
-    int LightningCount = 0;
-    float OverallLightningDist = 0;
     bool BigSteps = true;
     const float BigStepMultiplier = 3.0;
 
@@ -328,20 +327,27 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
             float nextTransmittance = transmittance*exp(-sigE*stepSize);
             float _dTr = transmittance-nextTransmittance;
-            //LIGHTNING
-            samplePosShadow = samplePos;
-            prevShadowDensity = density;
-            float curDist = 0;
-            if(GetLightSourceDirection(samplePos,sunDir,curDist)) {
-                OverallLightningDist+= curDist;
 
-                for(int i=0;i<adaptiveShadowSteps;++i) {
-                    samplePosShadow += ShadowStepSize*sunDir;
-                    float shadowDensity = GetCloudDensity(samplePosShadow,MipMap,adjCloudCoverage)*TransmittanceFalloff;
-                    LightningOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
-                    prevShadowDensity = shadowDensity;
+            if (LightningIntensity > 0.001) {
+                float3 lightDir;
+                float  lightDist;
+                if (GetNearestLightning(samplePos, lightDir, lightDist)) {
+                    float3 samplePosL = samplePos;
+                    float prevDensityL = density;
+                    for (int j = 0; j < adaptiveShadowSteps; ++j) {
+                        samplePosL += ShadowStepSize * lightDir;
+                        float dL = GetCloudDensity(samplePosL, MipMap, adjCloudCoverage) * TransmittanceFalloff;
+                        LightningOpticalDepth += betaE * ((prevDensityL + dL) * 0.5) * ShadowStepSize;
+                        prevDensityL = dL;
+                    }
+                    float lightTrans = exp(-LightningOpticalDepth);
+                    // Quadratic falloff: 1 at the bolt, 0 at LIGHTNING_MAX_DISTANCE.
+                    float distNorm = saturate(lightDist / LIGHTNING_MAX_DISTANCE);
+                    float falloff = (1.0 - distNorm) * (1.0 - distNorm);
+                    // Denser cloud lights up more — this sells "lit from within".
+                    float densityBoost = saturate(density * 5.0);
+                    LightningScatter += lightTrans * falloff * densityBoost * _dTr;
                 }
-                LightningScatter += exp(-LightningOpticalDepth)*_dTr;
             }
 
             //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
@@ -385,16 +391,16 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         depth =length(viewPos +tMax*viewDir); // Fallback for cirrus
     }
 
-    float3 ambientIrradiance = AmbientColor*AmbiantLight;
+    float3 ambientIrradiance = AmbientColor * AmbiantLight ;
+    float3 sunIrradiance     = normalize(SunColor) * SunIntensity;
 
-    float3 sunIrradiance = normalize(SunColor)*SunIntensity;
-    float LightningMultiplier = 0;
-    if(LightningCount>0) {
-        LightningMultiplier = 1-(OverallLightningDist/LightningCount)/(LIGHTNING_MAX_DISTANCE*LIGHTNING_MAX_DISTANCE);
-    }
-    float3 inScatter = (sunInScatterN0+sunInScatterN1)*sunIrradiance + ambientInScatterFinal*ambientIrradiance;
-    inScatter = lerp(inScatter,inScatter+LightningScatter*float3(0,0,1)*LightningMultiplier,LightningMultiplier);
-    return float4(inScatter,1-transmittance);
+    const float3 LIGHTNING_COLOR = float3(0.85, 0.92, 1.0);
+
+    float3 inScatter =    (sunInScatterN0 + sunInScatterN1) * sunIrradiance
+    + ambientInScatterFinal * ambientIrradiance
+    + LightningScatter * LIGHTNING_COLOR * LightningIntensity;
+
+    return float4(inScatter, 1 - transmittance);
 }
 
 uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
