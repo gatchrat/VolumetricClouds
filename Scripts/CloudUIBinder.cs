@@ -5,6 +5,8 @@ public class CloudUIBinder : MonoBehaviour
 {
     public UIDocument document;
     public UIDocument SecondaryDocument;
+    public UIDocument ColorSettings;
+    public Light sunLight;
     public CloudManager clouds;
     private Label FPSLabel;
     private float FPSTimer = 1f;
@@ -121,14 +123,103 @@ public class CloudUIBinder : MonoBehaviour
         {
             clouds.upscalingMode = (UpscalingMode)evt.newValue;
         });
+        ///COLOR SETTINGS
+        root = ColorSettings.rootVisualElement;
+        Debug.Log(sunLight.color);
+        //SUNPOSITION
+        Slider SunPosX =
+          root.Q<Slider>("SunPoxX");
+
+        SunPosX.value = sunLight.transform.position.y;
+
+        SunPosX.RegisterValueChangedCallback(evt =>
+        {
+            sunLight.transform.position = new Vector3(sunLight.transform.position.x, evt.newValue, sunLight.transform.position.z);
+        });
+        Slider SunPosY =
+        root.Q<Slider>("SunPoxY");
+
+        SunPosY.value = sunLight.transform.position.x;
+
+        SunPosY.RegisterValueChangedCallback(evt =>
+        {
+            sunLight.transform.position = new Vector3(evt.newValue, sunLight.transform.position.y, sunLight.transform.position.z);
+        });
+        //SUN COLOR
+        Slider SunColorR =
+        root.Q<Slider>("SUNCOLORR");
+
+        SunColorR.value = sunLight.color.r;
+
+        SunColorR.RegisterValueChangedCallback(evt =>
+        {
+            sunLight.color = new Color(evt.newValue, sunLight.color.g, sunLight.color.b);
+            Debug.Log(sunLight.color);
+        });
+        Slider SunColorG =
+       root.Q<Slider>("SUNCOLORG");
+
+        SunColorG.value = sunLight.color.g;
+
+
+        SunColorG.RegisterValueChangedCallback(evt =>
+        {
+            sunLight.color = new Color(sunLight.color.r, evt.newValue, sunLight.color.b);
+        });
+        Slider SunColorB =
+       root.Q<Slider>("SUNCOLORB");
+
+        SunColorB.value = sunLight.color.b;
+
+        SunColorB.RegisterValueChangedCallback(evt =>
+        {
+            sunLight.color = new Color(sunLight.color.r, sunLight.color.g, evt.newValue);
+        });
+        //AMBIENT COLOR
+        Slider AmbientColorR =
+        root.Q<Slider>("AmbientColorR");
+
+        AmbientColorR.value = RenderSettings.ambientLight.r;
+
+        AmbientColorR.RegisterValueChangedCallback(evt =>
+        {
+            RenderSettings.ambientLight = new Color(evt.newValue, RenderSettings.ambientLight.g, RenderSettings.ambientLight.b);
+        });
+        Slider AmbientColorG =
+       root.Q<Slider>("AmbientColorG");
+
+        AmbientColorG.value = RenderSettings.ambientLight.g;
+
+        AmbientColorG.RegisterValueChangedCallback(evt =>
+        {
+            RenderSettings.ambientLight = new Color(RenderSettings.ambientLight.r, evt.newValue, RenderSettings.ambientLight.b);
+        });
+        Slider AmbientColorB =
+       root.Q<Slider>("AmbientColorB");
+
+        AmbientColorB.value = RenderSettings.ambientLight.b;
+
+        AmbientColorB.RegisterValueChangedCallback(evt =>
+        {
+            RenderSettings.ambientLight = new Color(RenderSettings.ambientLight.r, RenderSettings.ambientLight.g, evt.newValue);
+        });
+
     }
+    private int _hitchCount;
+    private float _worstFrameMs;
+
     private void Update()
     {
-        FPSTimer -= Time.deltaTime;
+        float frameMs = Time.unscaledDeltaTime * 1000f;
+        if (frameMs > 10f) _hitchCount++;
+        if (frameMs > _worstFrameMs) _worstFrameMs = frameMs;
+
+        FPSTimer -= Time.unscaledDeltaTime;
         if (FPSTimer <= 0f)
         {
             FPSTimer = 0.5f;
-            FPSLabel.text = "FPS: " + Mathf.RoundToInt(1f / Time.deltaTime);
+            int fps = Mathf.RoundToInt(1f / Time.unscaledDeltaTime);
+            FPSLabel.text = $"FPS: {fps}  Hitches(>10ms): {_hitchCount}  Worst: {_worstFrameMs:F0}ms";
         }
     }
 }

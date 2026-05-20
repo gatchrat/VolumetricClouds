@@ -1,0 +1,22 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project://database/Assets/Samples/XR%20Interaction%20Toolkit/3.4.1/World%20Space%20UI/Styles/XRIStyleSheet.uss?fileID=7433441132597879392&amp;guid=3245a7d03283da54db4385c49204e816&amp;type=3#XRIStyleSheet"/>
+    <ui:VisualElement picking-mode="Ignore" style="flex-grow: 1; color: rgb(255, 255, 255); padding-left: 10px; padding-top: 10px; padding-right: 10px; padding-bottom: 10px; background-color: rgba(0, 0, 0, 0.75);">
+        <ui:Label text="SunSettings" style="-unity-text-align: upper-center; font-size: 24px;"/>
+        <ui:Label text="SunColor R" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="2.5" high-value="1" fill="true" name="SUNCOLORR"/>
+        <ui:Label text="SunColor G" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="1" high-value="1" fill="true" name="SUNCOLORG"/>
+        <ui:Label text="SunColor B" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="1" high-value="1" fill="true" name="SUNCOLORB"/>
+        <ui:Label text="Ambient Color R" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="4000" high-value="1" fill="true" low-value="0" name="AmbientColorR"/>
+        <ui:Label text="Ambient Color G" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="0.55" high-value="1" fill="true" name="AmbientColorG"/>
+        <ui:Label text="Ambient Color B" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="0.2" high-value="1" fill="true" name="AmbientColorB"/>
+        <ui:Label text="Sun Position X" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="1.9" high-value="360" fill="true" name="SunPoxX"/>
+        <ui:Label text="Sun Position Y" style="-unity-text-align: upper-center;"/>
+        <ui:Slider value="1.9" high-value="360" fill="true" name="SunPoxY"/>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,5 +1,5 @@
 #pragma kernel TemporalUpscaleAndMerge
-#define  RENDERTARGETMODE 2
+#define  RENDERTARGETMODE 1
 
 //Based on:
 //https://www.vertexfragment.com/ramblings/volumetric-cloud-upsampling/?utm_source=chatgpt.com#how-to-upsample-and-have-it-not-look-bad

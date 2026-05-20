@@ -1,11 +1,8 @@
 using UnityEngine;
 using System;
 using UnityEngine.Experimental.Rendering;
-using UnityEngine.Experimental.GlobalIllumination;
 using Unity.Mathematics;
 using System.Collections.Generic;
-using UnityEngine.UIElements;
-using Unity.VisualScripting;
 using System.Linq;
 
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
@@ -38,6 +35,9 @@ public struct CloudSettings
     public float CLOUD_BOTTOM;
     public float CloudStepSize;
     public float ShadowStepSize;
+    public float _pad6;
+    public float3 AmbientColor;
+    public float _pad7;
 }
 
 public enum UpscalingMode
@@ -116,6 +116,7 @@ public class CloudManager : MonoBehaviour
         cloudSettings.CLOUD_BOTTOM = CLOUD_BOTTOM;
         cloudSettings.CloudStepSize = CloudStepSize;
         cloudSettings.ShadowStepSize = ShadowStepSize;
+        cloudSettings.AmbientColor = new Vector3(RenderSettings.ambientLight.r, RenderSettings.ambientLight.g, RenderSettings.ambientLight.b);
         if (Lightning)
         {
             handleLightning();
@@ -190,6 +191,8 @@ public class CloudManager : MonoBehaviour
 
     void Start()
     {
+        //QualitySettings.vSyncCount = 0;
+        // Application.targetFrameRate = 144;
         Lightning fake = new Lightning();
         fake.origin = new float3(0, -1, 0);
         fake.direction = new float3(0, -1, 0);

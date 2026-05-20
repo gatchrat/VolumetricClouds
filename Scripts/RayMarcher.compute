@@ -1,6 +1,6 @@
 #pragma kernel CloudRaymarch
 
-#define  RENDERTARGETMODE 2
+#define  RENDERTARGETMODE 1
 
 Texture3D<float2> ShapeTexture;
 Texture3D<float> DetailTexture;
@@ -48,6 +48,9 @@ cbuffer _CloudSettings {
     float CLOUD_BOTTOM;
     float CloudStepSize;
     float ShadowStepSize;
+    float _pad6;
+    float3 AmbientColor;
+    float _pad7;
 };
 
 struct Lightning {
@@ -277,7 +280,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     float adjCloudCoverage = ComputeAdjCloudCoverage(CloudDensity);
     int steps = 0;
     //Iterate from cloud entry to cloud exit position, based on the ray length
-    while(t<tMax && steps < 10000) {
+    while(t<tMax && steps < 500) {
         steps++;
         float3 samplePos = viewPos +t*viewDir;
         if(samplePos.y-PLANET_THICKNESS <-10000) {
@@ -382,7 +385,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
         depth =length(viewPos +tMax*viewDir); // Fallback for cirrus
     }
 
-    float3 ambientIrradiance = float3(0.55, 0.65, 0.85)*AmbiantLight;
+    float3 ambientIrradiance = AmbientColor*AmbiantLight;
 
     float3 sunIrradiance = normalize(SunColor)*SunIntensity;
     float LightningMultiplier = 0;

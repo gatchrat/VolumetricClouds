@@ -18,7 +18,6 @@ public class CloudRenderPass : ScriptableRenderPass
     public RenderTexture ShapeRenderTexture;
     public RenderTexture DetailRenderTexture;
     public Texture2D BlueNoiseTexture;
-    private CloudSettings _lastSettings;
 
     private RenderTexture _quarterCloudColor;
     private RenderTexture _quarterCloudAlpha;
@@ -121,12 +120,8 @@ public class CloudRenderPass : ScriptableRenderPass
             _settingsBuffer = new ComputeBuffer(1,
                 System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
 
-        if (!settings.Equals(_lastSettings))
-        {
-            _settingsScratch[0] = settings;
-            _settingsBuffer.SetData(_settingsScratch);
-            _lastSettings = settings;
-        }
+        _settingsScratch[0] = settings;
+        _settingsBuffer.SetData(_settingsScratch);
     }
 
     public CloudRenderPass(ComputeShader shader, ComputeShader upscaleShader, ComputeShader mergeShader)
