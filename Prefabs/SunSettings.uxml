@@ -3,7 +3,7 @@
     <ui:VisualElement picking-mode="Ignore" style="flex-grow: 1; color: rgb(255, 255, 255); padding-left: 10px; padding-top: 10px; padding-right: 10px; padding-bottom: 10px; background-color: rgba(0, 0, 0, 0.75);">
         <ui:Label text="SunSettings" style="-unity-text-align: upper-center; font-size: 24px;"/>
         <ui:Label text="SunColor R" style="-unity-text-align: upper-center;"/>
-        <ui:Slider value="2.5" high-value="1" fill="true" name="SUNCOLORR"/>
+        <ui:Slider value="2.5" high-value="1" fill="true" name="SUNCOLORR" show-input-field="false" label=""/>
         <ui:Label text="SunColor G" style="-unity-text-align: upper-center;"/>
         <ui:Slider value="1" high-value="1" fill="true" name="SUNCOLORG"/>
         <ui:Label text="SunColor B" style="-unity-text-align: upper-center;"/>
