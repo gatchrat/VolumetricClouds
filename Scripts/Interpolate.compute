@@ -86,11 +86,21 @@ void CompositeAndWriteOutput(uint3 id, float3 resultColor, float resultAlpha) {
     float4 outColor = src;
 
     bool isSkyPixel = depth == 0;
+    float a = saturate(resultAlpha);
 
-    if (resultAlpha > 0.0001 && isSkyPixel) {
-        outColor.rgb = src.rgb * (1.0 - resultAlpha) + resultColor;
+    if (a > 0.0001 && isSkyPixel) {
+        float aSharp = smoothstep(0.1, 1.2, a);
+        float lightScale = aSharp / max(a, 0.001);
+        outColor.rgb = src.rgb * (1.0 - aSharp) + resultColor * lightScale;
         outColor.a = 1.0;
     }
+    /*float a = saturate(resultAlpha); Added some dark borders near horizon
+    a *= a;
+
+    if (a > 0.0001 && isSkyPixel) {
+        outColor.rgb = lerp(src.rgb, resultColor, a);
+        outColor.a = 1.0;
+    }*/
 #if RENDERTARGETMODE == 1
     _OutputTex[uint3(id.xy, id.z)] = outColor;      
 #else 
