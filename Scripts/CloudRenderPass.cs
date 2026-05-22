@@ -130,7 +130,8 @@ public class CloudRenderPass : ScriptableRenderPass
         UpscaleShader = upscaleShader;
         _raymarchKernel = shader.FindKernel("CloudRaymarch");
         _upscaleKernel = upscaleShader.FindKernel("TemporalUpscaleAndMerge");
-        renderPassEvent = RenderPassEvent.AfterRenderingSkybox;
+        //Make sure to render AFTER cirrus clouds
+        renderPassEvent = RenderPassEvent.AfterRenderingSkybox + 1;
     }
 
     private class PassData

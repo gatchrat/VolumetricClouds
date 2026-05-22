@@ -4,7 +4,17 @@ using UnityEngine.Experimental.Rendering;
 using Unity.Mathematics;
 using System.Collections.Generic;
 using System.Linq;
-
+//SOUND ATTRIBUTIONS: 
+//Nightrain https://freesound.org/people/titi2/sounds/571245/
+/*BIRDS
+Singing Birds 3 - (Kouri Forest - Salonika) 22.05.12 18:35 by Ali@k -- https://freesound.org/s/156581/ -- License: Attribution 3.0
+*/
+/* CICADAS
+Cicada 1.aif by le_abbaye_Noirlac -- https://freesound.org/s/129475/ -- License: Attribution 3.0
+*/
+//Image Attribution
+//https://unsplash.com/de/fotos/eine-grune-wiese-mit-baumen-und-wolken-am-himmel-DcjAZaG6NWU
+//Rest is mine
 [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
 public struct Lightning
 {
