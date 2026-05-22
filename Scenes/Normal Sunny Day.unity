@@ -789,14 +789,14 @@ MonoBehaviour:
   CloudThickness: 1797
   CloudDensity: 0.53
   Lightning: 0
-  SunBlindingEffectStrengh: 0.144
+  SunBlindingEffectStrengh: 0.07
   CloudMovementSpeed: 1.9
   Scale: {x: 1, y: 1, z: 1}
   EnableClouds: 1
   CloudStepSize: 250
   ShadowStepSize: 800
   upscalingMode: 1
-  seed: 22
+  seed: 33
   ShapeTextureSize: 128
   ShapeRenderTexture: {fileID: 0}
   DetailRenderTexture: {fileID: 0}

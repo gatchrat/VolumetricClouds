@@ -86,11 +86,9 @@ void CompositeAndWriteOutput(uint3 id, float3 resultColor, float resultAlpha) {
     float4 outColor = src;
 
     bool isSkyPixel = depth == 0;
-    float a = saturate(resultAlpha);
-    a *= a;
 
-    if (a > 0.0001 && isSkyPixel) {
-        outColor.rgb = lerp(src.rgb, resultColor, a);
+    if (resultAlpha > 0.0001 && isSkyPixel) {
+        outColor.rgb = src.rgb * (1.0 - resultAlpha) + resultColor;
         outColor.a = 1.0;
     }
 #if RENDERTARGETMODE == 1
