@@ -1,6 +1,6 @@
 // Unity built-in shader source. Copyright (c) 2016 Unity Technologies. MIT license (see license.txt)
 //https://raw.githubusercontent.com/TwoTailsGames/Unity-Built-in-Shaders/refs/heads/master/DefaultResourcesExtra/Skybox-Procedural.shader
-//but all float are replace with float
+//but all float are replace with float thanks to suggestion in https://discussions.unity.com/t/hdri-banding-issue/673555/4
 Shader "Skybox/ProceduralFullAccuracy" {
 Properties {
     [KeywordEnum(None, Simple, High Quality)] _SunDisk ("Sun", Int) = 2
