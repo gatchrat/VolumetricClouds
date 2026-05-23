@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
 
 public class CloudUIBinder : MonoBehaviour
@@ -85,6 +86,16 @@ public class CloudUIBinder : MonoBehaviour
             clouds.CloudMovementSpeed = evt.newValue;
         });
 
+        Toggle EnablelightningToggle =
+           root.Q<Toggle>("LightningToggle");
+
+        EnablelightningToggle.value = clouds.Lightning;
+
+        EnablelightningToggle.RegisterValueChangedCallback(evt =>
+        {
+            clouds.Lightning = evt.newValue;
+        });
+
         //FPS
         root = SecondaryDocument.rootVisualElement;
         FPSLabel = root.Q<Label>("FPSLabel");
@@ -123,6 +134,57 @@ public class CloudUIBinder : MonoBehaviour
         {
             clouds.upscalingMode = (UpscalingMode)evt.newValue;
         });
+        EnumField SceneEnumField =
+            root.Q<EnumField>("Scene");
+        Debug.Log(SceneManager.GetActiveScene().name);
+        switch (SceneManager.GetActiveScene().name)
+        {
+            case "Normal":
+                SceneEnumField.value = CloudLevel.Standard;
+                break;
+            case "OrangeEvening":
+                SceneEnumField.value = CloudLevel.BeachEvening;
+                break;
+            case "Normal Sunny Day":
+                SceneEnumField.value = CloudLevel.BrightDay;
+                break;
+            case "Pink":
+                SceneEnumField.value = CloudLevel.CottonCandy;
+                break;
+            case "Night Rain":
+                SceneEnumField.value = CloudLevel.LonelyNight;
+                break;
+            case "BLue night":
+                SceneEnumField.value = CloudLevel.StormyNight;
+                break;
+        }
+        SceneEnumField.RegisterValueChangedCallback(evt =>
+        {
+            CloudLevel cloudLevel = (CloudLevel)evt.newValue;
+            switch (cloudLevel)
+            {
+                case CloudLevel.Standard:
+                    SceneManager.LoadScene("Normal");
+                    break;
+                case CloudLevel.BeachEvening:
+                    SceneManager.LoadScene("OrangeEvening");
+                    break;
+                case CloudLevel.BrightDay:
+                    SceneManager.LoadScene("Normal Sunny Day");
+                    break;
+                case CloudLevel.CottonCandy:
+                    SceneManager.LoadScene("Pink");
+                    break;
+                case CloudLevel.LonelyNight:
+                    SceneManager.LoadScene("Night Rain");
+                    break;
+                case CloudLevel.StormyNight:
+                    SceneManager.LoadScene("BLue night");
+                    break;
+                default:
+                    break;
+            }
+        });
         ///COLOR SETTINGS
         root = ColorSettings.rootVisualElement;
         Debug.Log(sunLight.color);
@@ -130,20 +192,20 @@ public class CloudUIBinder : MonoBehaviour
         Slider SunPosX =
           root.Q<Slider>("SunPoxX");
 
-        SunPosX.value = sunLight.transform.position.y;
+        SunPosX.value = sunLight.transform.eulerAngles.y;
 
         SunPosX.RegisterValueChangedCallback(evt =>
         {
-            sunLight.transform.position = new Vector3(sunLight.transform.position.x, evt.newValue, sunLight.transform.position.z);
+            sunLight.transform.eulerAngles = new Vector3(sunLight.transform.eulerAngles.x, evt.newValue, sunLight.transform.eulerAngles.z);
         });
         Slider SunPosY =
         root.Q<Slider>("SunPoxY");
 
-        SunPosY.value = sunLight.transform.position.x;
+        SunPosY.value = sunLight.transform.eulerAngles.x;
 
         SunPosY.RegisterValueChangedCallback(evt =>
         {
-            sunLight.transform.position = new Vector3(evt.newValue, sunLight.transform.position.y, sunLight.transform.position.z);
+            sunLight.transform.eulerAngles = new Vector3(evt.newValue, sunLight.transform.eulerAngles.y, sunLight.transform.eulerAngles.z);
         });
         //SUN COLOR
         Slider SunColorR =

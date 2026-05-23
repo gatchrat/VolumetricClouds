@@ -13,6 +13,7 @@ Singing Birds 3 - (Kouri Forest - Salonika) 22.05.12 18:35 by Ali@k -- https://f
 Cicada 1.aif by le_abbaye_Noirlac -- https://freesound.org/s/129475/ -- License: Attribution 3.0
 */
 //BEACH https://freesound.org/people/kijjaz/sounds/372021/
+//OWl https://freesound.org/people/saralana/sounds/559100/
 //Image Attribution
 //https://unsplash.com/de/fotos/eine-grune-wiese-mit-baumen-und-wolken-am-himmel-DcjAZaG6NWU
 //https://picryl.com/media/sky-clouds-form-cumulus-clouds-5c33ca (Creative Commons CC0 1.0)
@@ -59,6 +60,15 @@ public enum UpscalingMode
     X4,
     X8,
     X16
+}
+public enum CloudLevel
+{
+    Standard,
+    LonelyNight,
+    StormyNight,
+    BeachEvening,
+    BrightDay,
+    CottonCandy
 }
 public class CloudManager : MonoBehaviour
 {
