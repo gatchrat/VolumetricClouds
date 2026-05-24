@@ -50,6 +50,9 @@ public class CloudRenderPass : ScriptableRenderPass
     private RTHandle _blueNoiseHandle;
     private static readonly int _flipY = SystemInfo.graphicsUVStartsAtTop ? 1 : 0;
 
+    private bool _xrKeywordsApplied;
+    private bool _xrKeywordsInitialized;
+
     private void EnsurePerEyeArrays(int eyeCount)
     {
         if (_perEyeArraysEyeCount == eyeCount) return;
@@ -181,6 +184,23 @@ public class CloudRenderPass : ScriptableRenderPass
         bool isXR = cameraData.xr.enabled;
 
         int eyeCount = isXR ? 2 : 1;
+
+        //Fix last frame error
+        if (!_xrKeywordsInitialized || isXR != _xrKeywordsApplied)
+        {
+            if (isXR)
+            {
+                _shader.EnableKeyword("RENDERTARGET_XR");
+                UpscaleShader.EnableKeyword("RENDERTARGET_XR");
+            }
+            else
+            {
+                _shader.DisableKeyword("RENDERTARGET_XR");
+                UpscaleShader.DisableKeyword("RENDERTARGET_XR");
+            }
+            _xrKeywordsApplied = isXR;
+            _xrKeywordsInitialized = true;
+        }
 
         int fullWidth = cameraData.cameraTargetDescriptor.width;
         int fullHeight = cameraData.cameraTargetDescriptor.height;

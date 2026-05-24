@@ -211,7 +211,7 @@ public class CloudUIBinder : MonoBehaviour
         Slider SunPosX =
           root.Q<Slider>("SunPoxX");
 
-        SunPosX.value = sunLight.transform.eulerAngles.y;
+        SunPosX.value = sunY;
 
         SunPosX.RegisterValueChangedCallback(evt =>
         {
@@ -221,7 +221,7 @@ public class CloudUIBinder : MonoBehaviour
         Slider SunPosY =
         root.Q<Slider>("SunPoxY");
 
-        SunPosY.value = sunLight.transform.eulerAngles.x;
+        SunPosY.value = sunX;
 
         SunPosY.RegisterValueChangedCallback(evt =>
         {

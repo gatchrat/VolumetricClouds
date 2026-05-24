@@ -1,6 +1,8 @@
 #pragma kernel CloudRaymarch
 
-#define  RENDERTARGETMODE 1
+// _ = PC (Tex2D bindings). RENDERTARGET_XR = Quest/SPI (Tex2DArray bindings).
+// Toggled from CloudRenderPass.cs based on cameraData.xr.enabled.
+#pragma multi_compile _ RENDERTARGET_XR
 
 Texture3D<float2> ShapeTexture;
 Texture3D<float> DetailTexture;
@@ -15,10 +17,9 @@ RWTexture2DArray<float3> _CloudColorBuffer;
 RWTexture2DArray<float>  _CloudAlphaBuffer;
 
 RWTexture2DArray<float>  _CloudDepthTex;
-#if RENDERTARGETMODE == 1
+#ifdef RENDERTARGET_XR
 Texture2DArray<float>    _DepthTex;
-#else 
-
+#else
 Texture2D<float>    _DepthTex;
 #endif
 
@@ -426,7 +427,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     if (id.x >= (uint)_Resolution.x || id.y >= (uint)_Resolution.y) return;
     uint2 FullResPixel = ConvertQuarterToFullRes(id.xy);
 
-#if RENDERTARGETMODE == 1
+#ifdef RENDERTARGET_XR
     if(_DepthTex[uint3(FullResPixel, id.z)] >0.1) {
         _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
         _CloudAlphaBuffer[id.xyz] = 1;
