@@ -10,6 +10,8 @@ public class CloudUIBinder : MonoBehaviour
     public Light sunLight;
     public CloudManager clouds;
     private Label FPSLabel;
+
+    Label StatsLabel;
     private float FPSTimer = 1f;
 
     private void Start()
@@ -97,7 +99,9 @@ public class CloudUIBinder : MonoBehaviour
         });
 
         //FPS
+
         root = SecondaryDocument.rootVisualElement;
+        StatsLabel = root.Q<Label>("Stats");
         FPSLabel = root.Q<Label>("FPSLabel");
 
         Toggle EnableCloudsToggle =
@@ -117,6 +121,17 @@ public class CloudUIBinder : MonoBehaviour
         CloudQualitySlider.RegisterValueChangedCallback(evt =>
         {
             clouds.CloudStepSize = evt.newValue;
+            StatsLabel.text = $"Cloud Step Size: {clouds.CloudStepSize:F0}m";
+        });
+        Slider SizeMultiplierSlider =
+           root.Q<Slider>("SizeMultiplierSlider");
+
+        SizeMultiplierSlider.value = clouds.BigStepMultiplier;
+
+        SizeMultiplierSlider.RegisterValueChangedCallback(evt =>
+        {
+            clouds.BigStepMultiplier = evt.newValue;
+            StatsLabel.text = $"Big Step Multiplier: {clouds.BigStepMultiplier:F1}x";
         });
         Slider ShadowQualitySlider =
           root.Q<Slider>("ShadowQuality");
@@ -126,6 +141,7 @@ public class CloudUIBinder : MonoBehaviour
         ShadowQualitySlider.RegisterValueChangedCallback(evt =>
         {
             clouds.ShadowStepSize = evt.newValue;
+            StatsLabel.text = $"Shadow Step Size: {clouds.ShadowStepSize:F0}m";
         });
         EnumField UpscalingModeEnum =
             root.Q<EnumField>("UpscalingMode");
@@ -187,7 +203,6 @@ public class CloudUIBinder : MonoBehaviour
         });
         ///COLOR SETTINGS
         root = ColorSettings.rootVisualElement;
-        Debug.Log(sunLight.color);
         //SUNPOSITION
         Slider SunPosX =
           root.Q<Slider>("SunPoxX");
@@ -268,20 +283,18 @@ public class CloudUIBinder : MonoBehaviour
 
     }
     private int _hitchCount;
-    private float _worstFrameMs;
 
     private void Update()
     {
         float frameMs = Time.unscaledDeltaTime * 1000f;
-        if (frameMs > 10f) _hitchCount++;
-        if (frameMs > _worstFrameMs) _worstFrameMs = frameMs;
+        if (frameMs > 32f) _hitchCount++;
 
         FPSTimer -= Time.unscaledDeltaTime;
         if (FPSTimer <= 0f)
         {
             FPSTimer = 0.5f;
             int fps = Mathf.RoundToInt(1f / Time.unscaledDeltaTime);
-            FPSLabel.text = $"FPS: {fps}  Hitches(>10ms): {_hitchCount}  Worst: {_worstFrameMs:F0}ms";
+            FPSLabel.text = $"FPS: {fps}  Hitches(>32ms): {_hitchCount}";
         }
     }
 }

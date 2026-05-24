@@ -48,7 +48,7 @@ cbuffer _CloudSettings {
     float CLOUD_BOTTOM;
     float CloudStepSize;
     float ShadowStepSize;
-    float _pad6;
+    float BigStepMultiplier;
     float3 AmbientColor;
     float LightningIntensity;
 };
@@ -208,7 +208,7 @@ float GetCloudDensity(float3 WorldPos, float MipMap, float adjCloudCoverage) {
     Density *= cloudCoverage;
     if (Density < 0.02) return 0;
     float3 DetailNoisePos = ShapeNoisePos*10.0;
-    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
+    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,MipMap).x;
     float sharpDetail = DetailNoise * DetailNoise; 
     Density = RemapRange(Density, 0.5 * sharpDetail * noiseScale, 1.0, 0.0, 1.0);
     return Density;
@@ -271,11 +271,10 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     //Stepping optimisation
     int stepsWithoutCloud = 0;
     bool BigSteps = true;
-    const float BigStepMultiplier = 3.0;
 
     float rayOffset = (Noise - 0.5) * 0.1 * CloudStepSize;
     viewPos += viewDir*rayOffset;
-    float MipMap = SelectMipForWorldPos(viewPos);
+    float MipMap = 0;
     float adjCloudCoverage = ComputeAdjCloudCoverage(CloudDensity);
     int steps = 0;
     //Iterate from cloud entry to cloud exit position, based on the ray length

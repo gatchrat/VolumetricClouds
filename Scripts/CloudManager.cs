@@ -49,7 +49,7 @@ public struct CloudSettings
     public float CLOUD_BOTTOM;
     public float CloudStepSize;
     public float ShadowStepSize;
-    public float _pad6;
+    public float BigStepMultiplier;
     public float3 AmbientColor;
     public float LightningIntensity;
 }
@@ -95,6 +95,8 @@ public class CloudManager : MonoBehaviour
     [Header("Technical Stuff")]
     public float CloudStepSize = 250f;
     public float ShadowStepSize = 800f;
+    [Range(1f, 10f)]
+    public float BigStepMultiplier = 3f;
     public UpscalingMode upscalingMode = UpscalingMode.X4;
     public int seed = 42;
     public int ShapeTextureSize = 128;
@@ -143,6 +145,7 @@ public class CloudManager : MonoBehaviour
         cloudSettings.ShadowStepSize = ShadowStepSize;
         cloudSettings.AmbientColor = new Vector3(RenderSettings.ambientLight.r, RenderSettings.ambientLight.g, RenderSettings.ambientLight.b);
         cloudSettings.LightningIntensity = LightningTestIntensity;
+        cloudSettings.BigStepMultiplier = BigStepMultiplier;
 
         if (Lightning)
         {
