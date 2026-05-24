@@ -353,8 +353,9 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             }
 
             //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
-            sunInScatterN0 += sigS_over_sigE*lerp(1, powder, PowderStrength)*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation
-            sunInScatterN1 += 0.5*sigS_over_sigE*lerp(1, powder, PowderStrength)*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
+            float powderEffect = lerp(1.0, powder, PowderStrength);
+            sunInScatterN0 += sigS_over_sigE*powderEffect*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation
+            sunInScatterN1 += 0.5*sigS_over_sigE*powderEffect*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
 
             ambientInScatterN += sigS_over_sigE *powder*_dTr;
             distSum +=t*_dTr;
