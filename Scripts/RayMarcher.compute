@@ -253,7 +253,7 @@ bool GetNearestLightning(float3 WorldPos, out float3 LightDir, out float LightDi
     return hitAny;
 }
 //Mostly Doom based
-float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth, float Noise) {
+float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth) {
     int numShadowSteps = 6;
     float VdotL = dot(viewDir,SunDirection);//TODO Atteniate based on how much of color is suncolor
 
@@ -272,8 +272,8 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     int stepsWithoutCloud = 0;
     bool BigSteps = true;
 
-    float rayOffset = (Noise - 0.5) * 0.1 * CloudStepSize;
-    viewPos += viewDir*rayOffset;
+    float bigStepSize = CloudStepSize * BigStepMultiplier;
+    viewPos += viewDir;
     float MipMap = 0;
     float adjCloudCoverage = ComputeAdjCloudCoverage(CloudDensity);
     int steps = 0;
@@ -287,7 +287,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
         float stepSize;
         if (BigSteps) {
-            stepSize = CloudStepSize * BigStepMultiplier;
+            stepSize = bigStepSize;
         } else {
             stepSize = transmittance > 0.5 ? CloudStepSize :
             transmittance > 0.2 ? CloudStepSize * 1.5 :
@@ -302,7 +302,10 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             if(BigSteps) {
                 //revert big step and start small steps to find exact cloud start
                 BigSteps = false;
-                t -= stepSize;
+                t -= stepSize;//Step back to last big step
+                t += transmittance > 0.5 ? CloudStepSize :
+                transmittance > 0.2 ? CloudStepSize * 1.5 :
+                CloudStepSize * 2.5;//since that was 0 do the first small step
                 continue;
             }
 
@@ -441,8 +444,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     }
     float depth = 0;
 
-    float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
-    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise);
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
     if(result.w > 0) {
         _CloudColorBuffer[id.xyz] = result.rgb;
         _CloudAlphaBuffer[id.xyz] = result.w;
@@ -472,8 +474,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
     }
     float depth = 0;
 
-    float blueNoise = BlueNoise.SampleLevel(sampler_Trilinear_repeat, id.xy/(_Resolution*0.2), 0).x;
-    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth,blueNoise);
+    float4 result =  RayMarch(ray.origin, ray.direction,intersection.x,intersection.y,depth);
     if(result.w > 0) {
         _CloudColorBuffer[id.xyz] = result.rgb;
         _CloudAlphaBuffer[id.xyz] = result.w;
