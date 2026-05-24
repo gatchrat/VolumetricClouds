@@ -204,6 +204,10 @@ public class CloudUIBinder : MonoBehaviour
         ///COLOR SETTINGS
         root = ColorSettings.rootVisualElement;
         //SUNPOSITION
+        float sunY = sunLight.transform.eulerAngles.y;
+        float sunX = sunLight.transform.eulerAngles.x;
+        float sunZ = sunLight.transform.eulerAngles.z;
+
         Slider SunPosX =
           root.Q<Slider>("SunPoxX");
 
@@ -211,7 +215,8 @@ public class CloudUIBinder : MonoBehaviour
 
         SunPosX.RegisterValueChangedCallback(evt =>
         {
-            sunLight.transform.eulerAngles = new Vector3(sunLight.transform.eulerAngles.x, evt.newValue, sunLight.transform.eulerAngles.z);
+            sunY = evt.newValue;
+            sunLight.transform.rotation = Quaternion.Euler(sunX, sunY, sunZ);
         });
         Slider SunPosY =
         root.Q<Slider>("SunPoxY");
@@ -220,7 +225,8 @@ public class CloudUIBinder : MonoBehaviour
 
         SunPosY.RegisterValueChangedCallback(evt =>
         {
-            sunLight.transform.eulerAngles = new Vector3(evt.newValue, sunLight.transform.eulerAngles.y, sunLight.transform.eulerAngles.z);
+            sunX = evt.newValue;
+            sunLight.transform.rotation = Quaternion.Euler(sunX, sunY, sunZ);
         });
         //SUN COLOR
         Slider SunColorR =
