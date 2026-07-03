@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.XR.OpenXR.Features.Extensions.PerformanceSettings;
 using System;
 using UnityEngine.Experimental.Rendering;
 using Unity.Mathematics;
@@ -219,10 +220,32 @@ public class CloudManager : MonoBehaviour
         return CurFrameMovement;
     }
 
+    private void SetupCameraRig()
+    {
+        GameObject pcCamera = null;
+        GameObject xrRig = null;
+        foreach (var root in gameObject.scene.GetRootGameObjects())
+        {
+            if (root.name == "Main Camera") pcCamera = root;
+            else if (root.name == "XR Origin Hands (XR Rig)") xrRig = root;
+        }
+
+        bool xrActive = UnityEngine.XR.XRSettings.isDeviceActive;
+        pcCamera.SetActive(!xrActive);
+        xrRig.SetActive(xrActive);
+
+        if (xrActive)
+        {
+            XrPerformanceSettingsFeature.SetPerformanceLevelHint(PerformanceDomain.Gpu, PerformanceLevelHint.SustainedHigh);
+            XrPerformanceSettingsFeature.SetPerformanceLevelHint(PerformanceDomain.Cpu, PerformanceLevelHint.SustainedLow);
+        }
+    }
+
     void Start()
     {
+        SetupCameraRig();
         //QualitySettings.vSyncCount = 0;
-        // Application.targetFrameRate = 144;
+        //Application.targetFrameRate = 144;
         Lightning fake = new Lightning();
         fake.origin = new float3(0, -1, 0);
         fake.direction = new float3(0, -1, 0);
