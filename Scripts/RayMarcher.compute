@@ -1,7 +1,6 @@
 #pragma kernel CloudRaymarch
 
-// _ = PC (Tex2D bindings). RENDERTARGET_XR = Quest/SPI (Tex2DArray bindings).
-// Toggled from CloudRenderPass.cs based on cameraData.xr.enabled.
+// _ = PC (Tex2D bindings). RENDERTARGET_XR = Quest/SPI (Tex2DArray bindings)
 #pragma multi_compile _ RENDERTARGET_XR
 
 Texture3D<float2> ShapeTexture;
@@ -140,14 +139,7 @@ float2 IntersectCloudShell(Ray ray) {
     return float2(tMin, tMax);
 }
 
-//Check if in shell
-bool isInShell(float3 Worldpos) {
-    float dist = length(Worldpos);
-    if(dist>= SHELL_INNER && dist <= SHELL_OUTER) {
-        return true;
-    }
-    return false;
-}
+//Cur Unused
 int SelectMipForWorldPos(float3 Pos) {
     //Choose mipmap level based on angle 
     //(0,1,0) = up = closest = max mip 
@@ -174,9 +166,6 @@ float ComputeAdjCloudCoverage(float cloudCoverage) {
 }
 
 float GetCloudDensity(float3 WorldPos, float MipMap, float adjCloudCoverage) {
-    // Inline shell check using the same sqrt we need anyway for heightInShell.
-    // (Was: isInShell() did length(), then we did sqrt(dot(WorldPos,WorldPos))
-    // again. One length() call here, reused below.)
     float dist = length(WorldPos);
     if (dist < SHELL_INNER || dist > SHELL_OUTER) return 0;
 
@@ -226,9 +215,6 @@ float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
 // Finds the nearest point on any lightning segment.
-// Returns NORMALIZED direction from WorldPos toward that point, and the REAL
-// (non-squared) distance. Only returns true when a lightning is within
-// LIGHTNING_MAX_DISTANCE.
 bool GetNearestLightning(float3 WorldPos, out float3 LightDir, out float LightDist) {
     LightDir  = float3(0, 1, 0);
     LightDist = LIGHTNING_MAX_DISTANCE;
@@ -255,7 +241,9 @@ bool GetNearestLightning(float3 WorldPos, out float3 LightDir, out float LightDi
 }
 //Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth) {
-    int numShadowSteps = 6;
+    const int   numShadowSteps   = 4;
+    const float shadowStepGrowth = 1.5;
+    float shadowBaseStep = ShadowStepSize * (6.0 / 8.125);
     float VdotL = dot(viewDir,SunDirection);//TODO Atteniate based on how much of color is suncolor
 
     const float betaE = 0.003;//Extinction coeff at cloud density = 1, value guessed. Basicly how fast we stop marching in a clouds
@@ -315,13 +303,13 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             //SUN
             float3 sunDir = SunDirection;
 
-            int adaptiveShadowSteps = numShadowSteps;
-
-            for(int i=0;i<adaptiveShadowSteps;++i) {
-                samplePosShadow += ShadowStepSize*sunDir;
+            float shadowStepLen = shadowBaseStep;
+            for(int i=0;i<numShadowSteps;++i) {
+                samplePosShadow += shadowStepLen*sunDir;
                 float shadowDensity = GetCloudDensity(samplePosShadow,MipMap,adjCloudCoverage)*TransmittanceFalloff;
-                shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*ShadowStepSize;
+                shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*shadowStepLen;
                 prevShadowDensity = shadowDensity;
+                shadowStepLen *= shadowStepGrowth;
             }
 
             float sigE = betaE*density;
@@ -337,11 +325,13 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
                 if (GetNearestLightning(samplePos, lightDir, lightDist)) {
                     float3 samplePosL = samplePos;
                     float prevDensityL = density;
-                    for (int j = 0; j < adaptiveShadowSteps; ++j) {
-                        samplePosL += ShadowStepSize * lightDir;
+                    float lightStepLen = shadowBaseStep;
+                    for (int j = 0; j < numShadowSteps; ++j) {
+                        samplePosL += lightStepLen * lightDir;
                         float dL = GetCloudDensity(samplePosL, MipMap, adjCloudCoverage) * TransmittanceFalloff;
-                        LightningOpticalDepth += betaE * ((prevDensityL + dL) * 0.5) * ShadowStepSize;
+                        LightningOpticalDepth += betaE * ((prevDensityL + dL) * 0.5) * lightStepLen;
                         prevDensityL = dL;
+                        lightStepLen *= shadowStepGrowth;
                     }
                     float lightTrans = exp(-LightningOpticalDepth);
                     // Quadratic falloff: 1 at the bolt, 0 at LIGHTNING_MAX_DISTANCE.
