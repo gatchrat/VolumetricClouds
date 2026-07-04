@@ -74,17 +74,7 @@ static const float SHELL_THICKNESS = SHELL_OUTER - SHELL_INNER;
 static const float PLANET_THICKNESS = 6300*100; //630.000
 static const float LIGHTNING_MAX_DISTANCE = 20*100;
 
-//Currently unused
-float2 RayBoxIntersect(float3 boundsMin, float3 boundsMax, float3 rayOrigin, float3 rayDir) {
-    float3 t0 = (boundsMin - rayOrigin) / rayDir;
-    float3 t1 = (boundsMax - rayOrigin) / rayDir;
-    float3 tmin = min(t0, t1);
-    float3 tmax = max(t0, t1);
-    float dstA = max(max(tmin.x, tmin.y), tmin.z);
-    float dstB = min(tmax.x, min(tmax.y, tmax.z));
-    return float2(dstA, dstB);
-}
-
+//Generate Ray based on pixel position and camera matrices. Returns world space ray direction
 Ray GenerateRay(uint2 pixelCoord, uint eyeIndex) {
     float2 uv = (float2(pixelCoord) + 0.5) / _FullResolution;
 
@@ -102,12 +92,11 @@ Ray GenerateRay(uint2 pixelCoord, uint eyeIndex) {
 
     float3 worldPos = mul(_CameraToWorldPerEye[eyeIndex], float4(view.xyz,1)).xyz;
 
-    float3 camPos =
-    mul(_CameraToWorldPerEye[eyeIndex], float4(0,0,0,1)).xyz;
+    float3 camPos = mul(_CameraToWorldPerEye[eyeIndex], float4(0,0,0,1)).xyz;
 
     Ray ray;
 
-    ray.origin = camPos + float3(0, PLANET_THICKNESS, 0);
+    ray.origin = camPos + float3(0, PLANET_THICKNESS, 0); //artificial offset to simulate standing on planet instead of being at the center
 
     ray.direction = normalize(worldPos - camPos);
 
@@ -123,41 +112,21 @@ float2 RaySphereIntersect(float3 rayOrigin, float3 rayDir, float radius) {
     float b    = dot(rayOrigin, rayDir);
     float c    = dot(rayOrigin, rayOrigin) - radius * radius;
     float disc = b * b - c;
-    //if (disc < 0.0) return float2(-1, -1);
     float sq = sqrt(abs(disc));
     return float2(-b - sq, -b + sq);
 }
 
+//Gets distance from Ray origin to first layer and last layer of clouds. Based on distances we know if we ware inside/Outside or even in space in relation to atmosphere
 float2 IntersectCloudShell(Ray ray) {
-    // Camera-relative origin is always (0,0,0)
     float2 inner = RaySphereIntersect(ray.origin, ray.direction, SHELL_INNER);
     float2 outer = RaySphereIntersect(ray.origin, ray.direction, SHELL_OUTER);
 
     float tMin = abs(inner.y);
     float tMax = abs(outer.y);
-    //if (tMax <= 0.0 || tMax <= tMin) return float2(-1, -1);
     return float2(tMin, tMax);
 }
 
-//Cur Unused
-int SelectMipForWorldPos(float3 Pos) {
-    //Choose mipmap level based on angle 
-    //(0,1,0) = up = closest = max mip 
-    //(1,0,0) = sidewards = at horizon = min mip
-    return 0; //stability for cache has more impact than sampling a simpler mip level :/
-    Pos = normalize(Pos);
-    if(Pos.y > 0.9) {
-        return 0;
-    }
-    if(Pos.y > 0.4) {
-        return 1;
-    }
-    if(Pos.y > 0.1) {
-        return 2;
-    }
-    return 3;
-}
-
+//Was meant as preperation for enabling a texture to paint coverage into the sky, could be replaced by a set number
 float ComputeAdjCloudCoverage(float cloudCoverage) {
     const float cloudHeightScale     = 1.0;
     const float minAdjCloudCoverage  = saturate(0.0127 / (cloudHeightScale + 0.153));
@@ -165,27 +134,28 @@ float ComputeAdjCloudCoverage(float cloudCoverage) {
     return lerp(minAdjCloudCoverage, maxAdjCloudCoverage, cloudCoverage);
 }
 
-float GetCloudDensity(float3 WorldPos, float MipMap, float adjCloudCoverage) {
+float GetCloudDensity(float3 WorldPos, float adjCloudCoverage) {
     float dist = length(WorldPos);
     if (dist < SHELL_INNER || dist > SHELL_OUTER) return 0;
 
     float cloudCoverage = CloudDensity;
-    float Adjusted_Bottom = CLOUD_BOTTOM;
+    float Adjusted_Bottom = CLOUD_BOTTOM; //Was adjusted in doom, i didnt but kept variable around for better readability
     float Adjusted_Top = CLOUD_TOP;
 
-    float ShapeTiling = 0.00001;
+    float ShapeTiling = 0.00001; //General sensible scaling based on planet size
     float3 ShapeNoisePos = WorldPos*ShapeTiling*Scale;// From 1 = 1/1000 to 1000 = 1
-    ShapeNoisePos += Offset;
-    float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos,MipMap).xy;
+    ShapeNoisePos += Offset; //Cloud Movement
+    float2 ShapeNoise = ShapeTexture.SampleLevel(sampler_Trilinear_repeat, ShapeNoisePos,0).xy;
     float ShapeWorley = ShapeNoise.x;
     float ShapePerlin = ShapeNoise.y;
 
+    //This whole logic block is based on the Clouds in Doom
     float heightInShell = saturate((dist - SHELL_INNER) / SHELL_THICKNESS);
     float height = heightInShell * CLOUD_TOP;
     float topHeight = Adjusted_Top;
     float bottomHeight = ShapeWorley*Adjusted_Bottom;
-    float topHeightFade = RemapRange(height/topHeight,0.8,1.1,1.0,0.0);
-    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+Adjusted_Bottom,0.0,1.0);
+    float topHeightFade = RemapRange(height/topHeight,0.8,1.1,1.0,0.0); //Fade out near top so no intersection
+    float bottomHeightFade = RemapRange(height,bottomHeight,bottomHeight+Adjusted_Bottom,0.0,1.0); //Fade out near bottom so no intersection
     float heightShift = RemapRange(height,Adjusted_Bottom,topHeight,1.0,0.0)*bottomHeightFade;
     float noiseShift = 0.05*(1.0-heightShift);
     float thresholdShift  = 0.1*heightShift;
@@ -196,24 +166,29 @@ float GetCloudDensity(float3 WorldPos, float MipMap, float adjCloudCoverage) {
     Density = RemapRange(Density, 1.0 - adjCloudCoverage, 1.0, 0.0, 1.0);
     Density *= heightFade;
     Density *= cloudCoverage;
-    if (Density < 0.02) return 0;
-    float3 DetailNoisePos = ShapeNoisePos*10.0;
-    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,MipMap).x;
+    if (Density < 0.02) return 0; //Early skip for low values
+
+    float3 DetailNoisePos = ShapeNoisePos*10.0; //Details is smaller than clouds -> scale up
+    float DetailNoise = DetailTexture.SampleLevel(sampler_Trilinear_repeat,DetailNoisePos,0).x;
+
+    //This was regrettet in Doom, but same as in Doom all my tuning depends on this so it will be kept until complete rework
     float sharpDetail = DetailNoise * DetailNoise; 
     Density = RemapRange(Density, 0.5 * sharpDetail * noiseScale, 1.0, 0.0, 1.0);
     return Density;
 }
+
 //SChneider GPU7
 float HGPhase(float cos_angle, float inG) {
     float  denomBase = abs(1.0 + inG * inG - 2.0 * inG * cos_angle);
     float  denom     = denomBase * sqrt(denomBase);
-
     return ((1.0 - inG * inG) / denom) / 4.0 * 3.1415;
 }
+
 //Doom
 float HGPhase2Lobe(float VdotL, float g0, float g1, float weight1) {
     return lerp(HGPhase(VdotL,g0),HGPhase(VdotL,g1),weight1);
 }
+
 // Finds the nearest point on any lightning segment.
 bool GetNearestLightning(float3 WorldPos, out float3 LightDir, out float LightDist) {
     LightDir  = float3(0, 1, 0);
@@ -239,6 +214,7 @@ bool GetNearestLightning(float3 WorldPos, out float3 LightDir, out float LightDi
     }
     return hitAny;
 }
+
 //Mostly Doom based
 float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out float depth) {
     const int   numShadowSteps   = 4;
@@ -251,7 +227,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float t = tMin;
     float transmittance = 1.0;
-    float sunInScatterN0 = 0.0;
+    float sunInScatterN0 = 0.0; //Two octaves = Doom innovation
     float sunInScatterN1 = 0.0;
     float ambientInScatterN = 0.0;
     float LightningScatter = 0.0;
@@ -263,27 +239,31 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float bigStepSize = CloudStepSize * BigStepMultiplier;
     viewPos += viewDir;
-    float MipMap = 0;
     float adjCloudCoverage = ComputeAdjCloudCoverage(CloudDensity);
     int steps = 0;
+
     //Iterate from cloud entry to cloud exit position, based on the ray length
     while(t<tMax && steps < 500) {
         steps++;
         float3 samplePos = viewPos +t*viewDir;
+
+        //Prevent rendering clouds too much below horizon remove if wanted
         if(samplePos.y-PLANET_THICKNESS <-10000) {
             break;
         }
 
         float stepSize;
+        //Big Steps through empty space
         if (BigSteps) {
             stepSize = bigStepSize;
         } else {
+            //Scale up stepsize when deep in cloud
             stepSize = transmittance > 0.5 ? CloudStepSize :
             transmittance > 0.2 ? CloudStepSize * 1.5 :
             CloudStepSize * 2.5;
         }
 
-        float density = GetCloudDensity(samplePos,MipMap,adjCloudCoverage);
+        float density = GetCloudDensity(samplePos,adjCloudCoverage);
         float shadowOpticalDepth = 0.0;
         float LightningOpticalDepth = 0.0;
         if(density > 0) {
@@ -306,7 +286,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
             float shadowStepLen = shadowBaseStep;
             for(int i=0;i<numShadowSteps;++i) {
                 samplePosShadow += shadowStepLen*sunDir;
-                float shadowDensity = GetCloudDensity(samplePosShadow,MipMap,adjCloudCoverage)*TransmittanceFalloff;
+                float shadowDensity = GetCloudDensity(samplePosShadow,adjCloudCoverage)*TransmittanceFalloff;
                 shadowOpticalDepth += betaE*((prevShadowDensity+shadowDensity)*0.5)*shadowStepLen;
                 prevShadowDensity = shadowDensity;
                 shadowStepLen *= shadowStepGrowth;
@@ -314,11 +294,17 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
             float sigE = betaE*density;
             float powder = 4.0*(1.0-exp(-2.0*density));
-            float shadowTransmittance = exp(-shadowOpticalDepth);
+            float shadowTransmittance = exp(-shadowOpticalDepth); //How much Light survives into the cloud
 
             float nextTransmittance = transmittance*exp(-sigE*stepSize);
-            float _dTr = transmittance-nextTransmittance;
+            float _dTr = transmittance-nextTransmittance; 
+            /*A = exp(-sigE*stepSize) is Pure Transtmittance for this step it defines how much of the light that reaches this point would survive instead of Scattering.
+            B = 1-A would be how much of the light would scatter instead of going on its merry way
+            T_old = How much of the scattered light would survive the journey back home
+            So the the result for all light would be T_old * (1-A) = T_old-T_old*A which is dTR.
+            */
 
+            //Would advise againt reusing, lightning doesnt work like that
             if (LightningIntensity > 0.001) {
                 float3 lightDir;
                 float  lightDist;
@@ -328,22 +314,19 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
                     float lightStepLen = shadowBaseStep;
                     for (int j = 0; j < numShadowSteps; ++j) {
                         samplePosL += lightStepLen * lightDir;
-                        float dL = GetCloudDensity(samplePosL, MipMap, adjCloudCoverage) * TransmittanceFalloff;
+                        float dL = GetCloudDensity(samplePosL, adjCloudCoverage) * TransmittanceFalloff;
                         LightningOpticalDepth += betaE * ((prevDensityL + dL) * 0.5) * lightStepLen;
                         prevDensityL = dL;
                         lightStepLen *= shadowStepGrowth;
                     }
                     float lightTrans = exp(-LightningOpticalDepth);
-                    // Quadratic falloff: 1 at the bolt, 0 at LIGHTNING_MAX_DISTANCE.
                     float distNorm = saturate(lightDist / LIGHTNING_MAX_DISTANCE);
                     float falloff = (1.0 - distNorm) * (1.0 - distNorm);
-                    // Denser cloud lights up more — this sells "lit from within".
                     float densityBoost = saturate(density * 5.0);
                     LightningScatter += lightTrans * falloff * densityBoost * _dTr;
                 }
             }
 
-            //Sunscatter = How much sun gets bounced to our pos from other parts of the cloud
             float powderEffect = lerp(1.0, powder, PowderStrength);
             sunInScatterN0 += sigS_over_sigE*powderEffect*shadowTransmittance*_dTr; //Two Octaves of sunshine, doom innovation
             sunInScatterN1 += 0.5*sigS_over_sigE*powderEffect*sqrt(shadowTransmittance)*_dTr; //Lerp powder, because lowkey cringe for dark borders around cloud
@@ -376,13 +359,13 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
 
     float ambientInScatterFinalNoPowder = (1-transmittance)*sigS_over_sigE;
     float ambientInScatterFinal = lerp(ambientInScatterFinalNoPowder, ambientInScatterN, 0.35);
-    ambientInScatterFinal *= 1.0/(4.0*3.1415);
+    ambientInScatterFinal *= 1.0/(4.0*3.1415); //Stupid useles scaling, remove later
 
     float avgCloudDist = distSum /(1.0-transmittance);
     if(transmittance<1) {
-        depth= avgCloudDist;
+        depth= avgCloudDist; //Depth for temporal movement part of upscaler
     }else {
-        depth =length(viewPos +tMax*viewDir); // Fallback for cirrus
+        depth =length(viewPos +tMax*viewDir);
     }
 
     float3 ambientIrradiance = AmbientColor * AmbiantLight ;
@@ -397,6 +380,7 @@ float4 RayMarch(float3 viewPos, float3 viewDir, float tMin, float tMax, out floa
     return float4(inScatter, 1 - transmittance);
 }
 
+//Converts pixel position in quarter res cloud texture to position in full res texture
 uint2 ConvertQuarterToFullRes(uint2 QuarterPixel) {
     //Scale up by 4 and decide current pos in 4x4 square to achieve 16 pixel temporal
     //Scale 4x4 up to 16x16

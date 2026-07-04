@@ -32,14 +32,9 @@ public class CloudRenderPass : ScriptableRenderPass
     private RTHandle[] _fullCloudColorHandles = new RTHandle[2];
     private RTHandle[] _fullCloudAlphaHandles = new RTHandle[2];
 
-    // Single ping-pong index (SPI = one RecordRenderGraph call for both eyes)
     private int _currentBuffer = 0;
 
     public int BigDivider = 4;
-
-    // Per-eye matrix/vector arrays reused every frame to avoid GC allocations.
-    // _viewProjPing ping-pongs so the previous frame's VP survives without
-    // dropping the old array to the GC each frame.
     private Matrix4x4[][] _viewProjPing = new Matrix4x4[2][];
     private Matrix4x4[] _invViewProj;
     private Matrix4x4[] _camToWorld;
@@ -185,7 +180,6 @@ public class CloudRenderPass : ScriptableRenderPass
 
         int eyeCount = isXR ? 2 : 1;
 
-        //Fix last frame error
         if (!_xrKeywordsInitialized || isXR != _xrKeywordsApplied)
         {
             if (isXR)

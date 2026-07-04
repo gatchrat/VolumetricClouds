@@ -238,14 +238,17 @@ public class CloudManager : MonoBehaviour
         {
             XrPerformanceSettingsFeature.SetPerformanceLevelHint(PerformanceDomain.Gpu, PerformanceLevelHint.SustainedHigh);
             XrPerformanceSettingsFeature.SetPerformanceLevelHint(PerformanceDomain.Cpu, PerformanceLevelHint.SustainedLow);
+            Application.targetFrameRate = 72;
+        }
+        else
+        {
+            Application.targetFrameRate = 144;
         }
     }
 
     void Start()
     {
         SetupCameraRig();
-        //QualitySettings.vSyncCount = 0;
-        //Application.targetFrameRate = 144;
         Lightning fake = new Lightning();
         fake.origin = new float3(0, -1, 0);
         fake.direction = new float3(0, -1, 0);

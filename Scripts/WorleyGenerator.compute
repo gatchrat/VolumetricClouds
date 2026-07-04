@@ -123,7 +123,7 @@ void GenerateWorley(uint3 id : SV_DispatchThreadID) {
     float Perlin =lerp(0.5*PerlinNoise(id)+0.5,1,0.1*(2*val.z-1));
     ShapeRenderTexture[id] = float2(1-combined, Perlin);
 }
-
+//Base procedures for noise taken from Doom
 [numthreads(8,8,8)]
 void GenerateWorleyDetail(uint3 id : SV_DispatchThreadID) {
     //Different kernel because i possibly had some cross writing between buffers before. Probably just skill-issue

@@ -121,10 +121,8 @@ void TemporalUpscaleAndMerge(uint3 id : SV_DispatchThreadID) {
     float2 quarterCoord = (float2(id.xy) - float2(jitter)) / float(_BigDivider);
     float2 quarterUV    = (quarterCoord + 0.5) / _QuarterResolution;
 
-    float3 newColor = _QuarterCloudColor.SampleLevel(
-        sampler_linear_clamp, float3(quarterUV, id.z), 0);
-    float newAlpha = _QuarterCloudAlpha.SampleLevel(
-        sampler_linear_clamp, float3(quarterUV, id.z), 0);
+    float3 newColor = _QuarterCloudColor.SampleLevel(sampler_linear_clamp, float3(quarterUV, id.z), 0); //Fresh Data from low res pixel
+    float newAlpha = _QuarterCloudAlpha.SampleLevel(sampler_linear_clamp, float3(quarterUV, id.z), 0);
 
     int2 nearestQuarter = int2(round(quarterCoord));
     nearestQuarter = clamp(nearestQuarter,
@@ -133,8 +131,8 @@ void TemporalUpscaleAndMerge(uint3 id : SV_DispatchThreadID) {
             (int)_QuarterResolution.y - 1));
     float cloudDist = _CloudDepthTex.Load(int4(nearestQuarter, (int)id.z, 0)).r;
 
-    //No Cloud — write fresh sample to history + composite (alpha is ~0 so src passes through).
     if (cloudDist < 1) {
+        //No cloud -> just write color
         _CloudColorBuffer[id.xyz] = newColor;
         _CloudAlphaBuffer[id.xyz] = newAlpha;
         CompositeAndWriteOutput(id, newColor, newAlpha);
@@ -142,11 +140,11 @@ void TemporalUpscaleAndMerge(uint3 id : SV_DispatchThreadID) {
     }
 
     float3 rayDir   = GenerateRayDir(id.xy, id.z);
-    float3 worldPos = _CameraPos[id.z].xyz + rayDir * cloudDist;
+    float3 worldPos = _CameraPos[id.z].xyz + rayDir * cloudDist; 
     float3 worldPosPrev = worldPos + _CloudWorldMotion;
 
     bool   reprojValid;
-    float2 prevUV = ProjectToPrevUV(worldPosPrev, id.z, reprojValid);
+    float2 prevUV = ProjectToPrevUV(worldPosPrev, id.z, reprojValid); //Reproject current pixel using known distance, cloud movement and camera movement to pixel on previous frame
     if (!reprojValid) {
         _CloudColorBuffer[id.xyz] = newColor;
         _CloudAlphaBuffer[id.xyz] = newAlpha;
@@ -157,7 +155,7 @@ void TemporalUpscaleAndMerge(uint3 id : SV_DispatchThreadID) {
     float3 historyColor = _HistoryColor.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
     float  historyAlpha = _HistoryAlpha.SampleLevel(sampler_linear_clamp, float3(prevUV, id.z), 0);
 
-    //Dont overdo new sample or you just get bisampling again. Dont underdo or you just get reprojection
+    //Blend Historical and new data
     float3 resultColor = lerp(historyColor, newColor, HISTORY_BLEND);
     float  resultAlpha = saturate(lerp(historyAlpha, newAlpha, HISTORY_BLEND));
 

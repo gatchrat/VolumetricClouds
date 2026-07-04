@@ -2,7 +2,7 @@ using UnityEngine;
 
 public class CirrusDomeFollow : MonoBehaviour
 {
-    //Follow player to keep Cirrus clouds at "infinite" distance
+    //Follow player to keep Cirrus clouds at same distance
     public Transform Target;
 
     private void Start()
