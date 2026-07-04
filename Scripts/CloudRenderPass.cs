@@ -94,9 +94,8 @@ public class CloudRenderPass : ScriptableRenderPass
         EnsureArray(ref _fullCloudAlphas[1], ref _fullCloudAlphaHandles[1], fullWidth, fullHeight, RenderTextureFormat.RHalf, eyeCount);
     }
 
-    private ComputeBuffer _settingsBuffer;
+    private CloudSettings _currentSettings;
     private GraphicsBuffer _LightningBuffer;
-    private readonly CloudSettings[] _settingsScratch = new CloudSettings[1];
 
     public void UpdateLightning(List<Lightning> Lightnings)
     {
@@ -114,12 +113,7 @@ public class CloudRenderPass : ScriptableRenderPass
 
     public void UpdateSettings(CloudSettings settings)
     {
-        if (_settingsBuffer == null)
-            _settingsBuffer = new ComputeBuffer(1,
-                System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
-
-        _settingsScratch[0] = settings;
-        _settingsBuffer.SetData(_settingsScratch);
+        _currentSettings = settings;
     }
 
     public CloudRenderPass(ComputeShader shader, ComputeShader upscaleShader, ComputeShader mergeShader)
@@ -147,7 +141,7 @@ public class CloudRenderPass : ScriptableRenderPass
         public TextureHandle depthBuffer;
         public TextureHandle blueNoiseHandle;
         public Vector3 SunPos;
-        public ComputeBuffer settingsBuffer;
+        public CloudSettings settings;
         public GraphicsBuffer lightningBuffer;
         public int fullWidth, fullHeight;
         public int quarterWidth, quarterHeight;
@@ -250,7 +244,7 @@ public class CloudRenderPass : ScriptableRenderPass
             data.fullHeight = fullHeight;
             data.quarterWidth = qWidth;
             data.quarterHeight = qHeight;
-            data.settingsBuffer = _settingsBuffer;
+            data.settings = _currentSettings;
             data.lightningBuffer = _LightningBuffer;
 
             data.cameraToWorld = _camToWorld;
@@ -307,8 +301,28 @@ public class CloudRenderPass : ScriptableRenderPass
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "BlueNoise", d.blueNoiseHandle);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_DepthTex", d.depthBuffer);
                 cmd.SetComputeTextureParam(d.shader, d.raymarchKernel, "_CloudDepthTex", d.quarterDepthBuffer);
-                cmd.SetComputeConstantBufferParam(d.shader, "_CloudSettings", d.settingsBuffer,
-                    0, System.Runtime.InteropServices.Marshal.SizeOf<CloudSettings>());
+
+                // Cloud settings pushed as individual uniforms because cbuffer was broken on Metal
+                var s = d.settings;
+                cmd.SetComputeVectorParam(d.shader, "Offset", new Vector4(s.Offset.x, s.Offset.y, s.Offset.z, 0f));
+                cmd.SetComputeVectorParam(d.shader, "Scale", new Vector4(s.Scale.x, s.Scale.y, s.Scale.z, 0f));
+                cmd.SetComputeFloatParam(d.shader, "CloudDensity", s.CloudDensity);
+                cmd.SetComputeFloatParam(d.shader, "BrightnesMultiplier", s.BrightnesMultiplier);
+                cmd.SetComputeFloatParam(d.shader, "TransmittanceFalloff", s.TransmittanceFalloff);
+                cmd.SetComputeFloatParam(d.shader, "PowderStrength", s.PowderStrength);
+                cmd.SetComputeFloatParam(d.shader, "AmbiantLight", s.AmbiantLight);
+                cmd.SetComputeFloatParam(d.shader, "SunBlindingEffectSize", s.SunBlindingEffectSize);
+                cmd.SetComputeVectorParam(d.shader, "SunColor", new Vector4(s.SunColor.x, s.SunColor.y, s.SunColor.z, 0f));
+                cmd.SetComputeFloatParam(d.shader, "SunIntensity", s.SunIntensity);
+                cmd.SetComputeVectorParam(d.shader, "SunDirection", new Vector4(s.SunDirection.x, s.SunDirection.y, s.SunDirection.z, 0f));
+                cmd.SetComputeFloatParam(d.shader, "CLOUD_TOP", s.CLOUD_TOP);
+                cmd.SetComputeFloatParam(d.shader, "CLOUD_BOTTOM", s.CLOUD_BOTTOM);
+                cmd.SetComputeFloatParam(d.shader, "CloudStepSize", s.CloudStepSize);
+                cmd.SetComputeFloatParam(d.shader, "ShadowStepSize", s.ShadowStepSize);
+                cmd.SetComputeFloatParam(d.shader, "BigStepMultiplier", s.BigStepMultiplier);
+                cmd.SetComputeVectorParam(d.shader, "AmbientColor", new Vector4(s.AmbientColor.x, s.AmbientColor.y, s.AmbientColor.z, 0f));
+                cmd.SetComputeFloatParam(d.shader, "LightningIntensity", s.LightningIntensity);
+
                 cmd.SetComputeBufferParam(d.shader, d.raymarchKernel, "Lightnings", d.lightningBuffer);
                 cmd.SetComputeIntParam(d.shader, "_LightningCount", lightningCount);
 
@@ -369,7 +383,6 @@ public class CloudRenderPass : ScriptableRenderPass
             _fullCloudAlphas[i]?.Release();
         }
         _blueNoiseHandle?.Release();
-        _settingsBuffer?.Release();
         _LightningBuffer?.Release();
         DetailRenderTexture?.Release();
         ShapeRenderTexture?.Release();

@@ -28,30 +28,24 @@ uint _FrameIndex;
 int _BigDivider;
 uint _FlipY;
 
-cbuffer _CloudSettings {
-    float3 Offset;
-    float _pad0;
-    float3 Scale;
-    float _pad1;
-    float CloudDensity;
-    float BrightnesMultiplier;
-    float TransmittanceFalloff;
-    float PowderStrength;
-    float AmbiantLight;
-    float SunBlindingEffectSize;
-    float _pad4;
-    float _pad5;
-    float3 SunColor;
-    float SunIntensity;
-    float3 SunDirection;
-    float CLOUD_TOP;
-    float CLOUD_BOTTOM;
-    float CloudStepSize;
-    float ShadowStepSize;
-    float BigStepMultiplier;
-    float3 AmbientColor;
-    float LightningIntensity;
-};
+float3 Offset;
+float3 Scale;
+float  CloudDensity;
+float  BrightnesMultiplier;
+float  TransmittanceFalloff;
+float  PowderStrength;
+float  AmbiantLight;
+float  SunBlindingEffectSize;
+float3 SunColor;
+float  SunIntensity;
+float3 SunDirection;
+float  CLOUD_TOP;
+float  CLOUD_BOTTOM;
+float  CloudStepSize;
+float  ShadowStepSize;
+float  BigStepMultiplier;
+float3 AmbientColor;
+float  LightningIntensity;
 
 struct Lightning {
     float3 origin;
@@ -430,8 +424,7 @@ void CloudRaymarch(uint3 id : SV_DispatchThreadID) {
         _CloudAlphaBuffer[id.xyz] = 0;
         _CloudDepthTex[id.xyz] =0;
     }
-#else 
-    // Level 2: cbuffer layout. Encode raw cbuffer values as a color.
+#else
     if(_DepthTex[uint2(FullResPixel)] >0.1) {
         _CloudColorBuffer[id.xyz] = float3(0, 0, 0);
         _CloudAlphaBuffer[id.xyz] = 1;
